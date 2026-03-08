@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
-import { supabase } from "@/../lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 type Miembro = { id: string; nombre: string; email: string; rol: string; telefono: string };
 type Campana = { id: string; nombre: string; ubicacion: string; estado: string };
