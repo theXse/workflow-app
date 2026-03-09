@@ -271,6 +271,19 @@ export default function MisTareas() {
     }
   };
 
+  const deleteMailing = async (mailingId: string) => {
+    if (!confirm('¿Eliminar este mailing? Esta acción no se puede deshacer.')) return;
+
+    const { error } = await supabase.from("mailings_mensuales").delete().eq("id", mailingId);
+
+    if (error) {
+      alert(`No se pudo borrar el mailing: ${error.message}`);
+      return;
+    }
+
+    setMailings(mailings.filter(m => m.id !== mailingId));
+  };
+
   // --- ALERTA VISUAL 48 HRS ---
   const isDelayed = (task: PersonalTask | RutaTask, cTime: number) => {
     if (task.priority !== 'NO_URGENTE' || task.status !== 'pending') return false;
@@ -372,12 +385,20 @@ export default function MisTareas() {
                     <p className="text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{m.objetivo_correo}</p>
                   </div>
 
-                  <button
-                    onClick={() => toggleMailingStatus(m)}
-                    className={`shrink-0 text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
-                  >
-                    {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
-                  </button>
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button
+                      onClick={() => toggleMailingStatus(m)}
+                      className={`text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                    >
+                      {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
+                    </button>
+                    <button
+                      onClick={() => deleteMailing(m.id)}
+                      className="text-xs font-bold px-3 py-2 rounded-lg bg-red-100 text-red-800 hover:bg-red-200"
+                    >
+                      Borrar
+                    </button>
+                  </div>
                 </div>
               );
             })}
