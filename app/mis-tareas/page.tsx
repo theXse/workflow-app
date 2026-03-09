@@ -202,6 +202,12 @@ export default function MisTareas() {
     }
   };
 
+  const notifyPersistenceError = (message: string) => {
+    setSaveNoticeType('error');
+    setSaveNotice(message);
+    setTimeout(() => setSaveNotice(''), 4500);
+  };
+
   // --- ACCIONES TAREAS ---
   const handleCreateTask = async (city: string, project: string) => {
     const desc = formDesc[project];
@@ -221,16 +227,23 @@ export default function MisTareas() {
   };
 
   const handleCompleteTask = async (id: string) => {
-    // UI Update inmediata
+    const previousTasks = tasks;
     setTasks(tasks.map(t => t.id === id ? { ...t, status: 'completed' } : t));
-    await supabase.from("personal_tasks").update({ status: 'completed' }).eq("id", id);
+    const { error } = await supabase.from("personal_tasks").update({ status: 'completed' }).eq("id", id);
+    if (error) {
+      setTasks(previousTasks);
+      notifyPersistenceError('❌ No se pudo guardar la tarea completada.');
+    }
   };
 
   const handleDeleteTask = async (id: string) => {
-    // UI Update intantánea
+    const previousTasks = tasks;
     setTasks(tasks.filter(t => t.id !== id));
-    // DB Update
-    await supabase.from("personal_tasks").delete().eq("id", id);
+    const { error } = await supabase.from("personal_tasks").delete().eq("id", id);
+    if (error) {
+      setTasks(previousTasks);
+      notifyPersistenceError('❌ No se pudo borrar la tarea.');
+    }
   };
 
   const handleLimpiarMes = async () => {
@@ -246,13 +259,17 @@ export default function MisTareas() {
   // --- ACCIONES TABLA CONTROL Y FOCO ---
   const toggleProjectStatus = async (ps: ProjectStatus) => {
     const newStatus = ps.status === 'OK' ? 'ATENCION' : 'OK';
-    
-    // UI Update optimista
+    const previous = projectStatuses;
+
     setProjectStatuses(projectStatuses.map(p => 
       p.id === ps.id ? { ...p, status: newStatus } : p
     ));
 
-    await supabase.from("project_status").update({ status: newStatus }).eq("id", ps.id);
+    const { error } = await supabase.from("project_status").update({ status: newStatus }).eq("id", ps.id);
+    if (error) {
+      setProjectStatuses(previous);
+      notifyPersistenceError('❌ No se pudo guardar el estado del proyecto.');
+    }
   };
 
   const saveFoco = async (project_name: string) => {
@@ -291,13 +308,23 @@ export default function MisTareas() {
   };
 
   const handleCompleteRutaTask = async (id: string) => {
+    const previous = rutaTasks;
     setRutaTasks(rutaTasks.map(t => t.id === id ? { ...t, status: 'completed' } : t));
-    await supabase.from("la_ruta_tasks").update({ status: 'completed' }).eq("id", id);
+    const { error } = await supabase.from("la_ruta_tasks").update({ status: 'completed' }).eq("id", id);
+    if (error) {
+      setRutaTasks(previous);
+      notifyPersistenceError('❌ No se pudo guardar la tarea de Ruta.');
+    }
   };
 
   const handleDeleteRutaTask = async (id: string) => {
+    const previous = rutaTasks;
     setRutaTasks(rutaTasks.filter(t => t.id !== id));
-    await supabase.from("la_ruta_tasks").delete().eq("id", id);
+    const { error } = await supabase.from("la_ruta_tasks").delete().eq("id", id);
+    if (error) {
+      setRutaTasks(previous);
+      notifyPersistenceError('❌ No se pudo borrar la tarea de Ruta.');
+    }
   };
 
   // --- MAILINGS MENSUALES ---
@@ -333,22 +360,34 @@ export default function MisTareas() {
   };
 
   const toggleMailingStatus = async (mailing: MailingMensual) => {
+    const previous = mailings;
     const nextStatus = mailing.estado_envio === 'pendiente' ? 'enviado' : 'pendiente';
-    const { data } = await supabase
+    setMailings(mailings.map(m => (m.id === mailing.id ? { ...m, estado_envio: nextStatus } : m)));
+
+    const { data, error } = await supabase
       .from("mailings_mensuales")
       .update({ estado_envio: nextStatus })
       .eq("id", mailing.id)
       .select()
       .single();
 
-    if (data) {
-      setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
+    if (error || !data) {
+      setMailings(previous);
+      notifyPersistenceError('❌ No se pudo actualizar el estado del mailing.');
+      return;
     }
+
+    setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
   };
 
   const handleDeleteMailing = async (mailingId: string) => {
+    const previous = mailings;
     setMailings(mailings.filter(m => m.id !== mailingId));
-    await supabase.from("mailings_mensuales").delete().eq("id", mailingId);
+    const { error } = await supabase.from("mailings_mensuales").delete().eq("id", mailingId);
+    if (error) {
+      setMailings(previous);
+      notifyPersistenceError('❌ No se pudo borrar el mailing.');
+    }
   };
 
   // --- ALERTA VISUAL 48 HRS ---
