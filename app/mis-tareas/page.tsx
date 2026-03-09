@@ -382,12 +382,19 @@ export default function MisTareas() {
 
   const handleDeleteMailing = async (mailingId: string) => {
     const previous = mailings;
-    setMailings(mailings.filter(m => m.id !== mailingId));
-    const { error } = await supabase.from("mailings_mensuales").delete().eq("id", mailingId);
-    if (error) {
-      setMailings(previous);
-      notifyPersistenceError('❌ No se pudo borrar el mailing.');
+
+    const { data, error } = await supabase
+      .from("mailings_mensuales")
+      .delete()
+      .eq("id", mailingId)
+      .select("id");
+
+    if (error || !data || data.length === 0) {
+      notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.');
+      return;
     }
+
+    setMailings(previous.filter(m => m.id !== mailingId));
   };
 
   // --- ALERTA VISUAL 48 HRS ---
