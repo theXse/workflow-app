@@ -44,7 +44,7 @@ type MailingMensual = {
   id_campana: string;
   mes_objetivo: string;
   objetivo_correo: string;
-  estado_envio: 'pendiente' | 'enviado';
+  estado_envio: 'pendiente' | 'enviado' | 'eliminado';
 };
 
 const getStoredString = (key: string) => {
@@ -138,7 +138,12 @@ export default function MisTareas() {
       supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
       supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
       supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
-      supabase.from("mailings_mensuales").select("*").neq("objetivo_correo", MAILING_SOFT_DELETED_MARK).order("mes_objetivo", { ascending: false })
+      supabase
+        .from("mailings_mensuales")
+        .select("*")
+        .neq("objetivo_correo", MAILING_SOFT_DELETED_MARK)
+        .neq("estado_envio", "eliminado")
+        .order("mes_objetivo", { ascending: false })
     ]);
 
     if (tData) setTasks(tData as PersonalTask[]);
@@ -394,9 +399,19 @@ export default function MisTareas() {
         throw new Error(payload?.error || 'No se pudo borrar el mailing en servidor.');
       }
     } catch (error) {
-      setMailings(previous);
-      const detail = error instanceof Error ? error.message : 'Revisa variables de entorno y permisos en Supabase.';
-      notifyPersistenceError('❌ No se pudo borrar el mailing.', detail);
+      const { error: fallbackError } = await supabase
+        .from('mailings_mensuales')
+        .update({
+          objetivo_correo: MAILING_SOFT_DELETED_MARK,
+          estado_envio: 'eliminado',
+        })
+        .eq('id', mailingId);
+
+      if (fallbackError) {
+        setMailings(previous);
+        const detail = error instanceof Error ? error.message : 'Revisa variables de entorno y permisos en Supabase.';
+        notifyPersistenceError('❌ No se pudo borrar el mailing.', detail);
+      }
     }
   };
 

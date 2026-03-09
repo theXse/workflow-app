@@ -27,14 +27,22 @@ export async function DELETE(
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { error } = await admin.from("mailings_mensuales").delete().eq("id", mailingId);
+  const { data, error } = await admin
+    .from("mailings_mensuales")
+    .update({
+      objetivo_correo: "__soft_deleted__",
+      estado_envio: "eliminado",
+    })
+    .eq("id", mailingId)
+    .select("id")
+    .single();
 
-  if (error) {
+  if (error || !data) {
     return NextResponse.json(
-      { error: error.message || "No se pudo borrar el mailing." },
+      { error: error?.message || "No se pudo borrar el mailing." },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, id: data.id });
 }
