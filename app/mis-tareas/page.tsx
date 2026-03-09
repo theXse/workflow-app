@@ -34,6 +34,19 @@ type RutaTask = {
   created_at: string;
 };
 
+type Campana = {
+  id: string;
+  nombre: string;
+};
+
+type MailingMensual = {
+  id: string;
+  id_campana: string;
+  mes_objetivo: string;
+  objetivo_correo: string;
+  estado_envio: 'pendiente' | 'enviado';
+};
+
 const AGENCY_STRUCTURE = [
   {
     city: "Osorno",
@@ -72,39 +85,44 @@ export default function MisTareas() {
   const [rutaFormPrio, setRutaFormPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
 
   const [currentTime, setCurrentTime] = useState<number>(0);
+  const [campanas, setCampanas] = useState<Campana[]>([]);
+  const [mailings, setMailings] = useState<MailingMensual[]>([]);
+  const [mailingProject, setMailingProject] = useState('');
+  const [mailingMes, setMailingMes] = useState('');
+  const [mailingObjetivo, setMailingObjetivo] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
 
-      // Traer tareas (ambos status)
-      const { data: tData } = await supabase
-        .from("personal_tasks")
-        .select("*")
-        .order("created_at", { ascending: true });
-      
-      // Traer status de proyectos
-      const { data: pData } = await supabase
-        .from("project_status")
-        .select("*")
-        .order("project_name", { ascending: true });
-
-      // Traer focos dinámicos
-      const { data: fData } = await supabase
-        .from("project_focus")
-        .select("*")
-        .order("created_at", { ascending: true });
-        
-      // Traer tareas de LA RUTA
-      const { data: rData } = await supabase
-        .from("la_ruta_tasks")
-        .select("*")
-        .order("created_at", { ascending: true });
+      const [
+        { data: tData },
+        { data: pData },
+        { data: fData },
+        { data: rData },
+        { data: cData },
+        { data: mData }
+      ] = await Promise.all([
+        supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
+        supabase.from("project_status").select("*").order("project_name", { ascending: true }),
+        supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
+        supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
+        supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
+        supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
+      ]);
       
       if (tData) setTasks(tData as PersonalTask[]);
       if (pData) setProjectStatuses(pData as ProjectStatus[]);
       if (fData) setFocuses(fData as ProjectFocus[]);
       if (rData) setRutaTasks(rData as RutaTask[]);
+      if (cData) {
+        const campanasData = cData as Campana[];
+        setCampanas(campanasData);
+        if (campanasData.length > 0) {
+          setMailingProject(campanasData[0].id);
+        }
+      }
+      if (mData) setMailings(mData as MailingMensual[]);
       
       setLoading(false);
       setCurrentTime(Date.now());
@@ -211,6 +229,48 @@ export default function MisTareas() {
     await supabase.from("la_ruta_tasks").delete().eq("id", id);
   };
 
+  // --- MAILINGS MENSUALES ---
+  const handleCreateMailing = async () => {
+    const selectedProjectId = mailingProject || campanas[0]?.id;
+    if (!selectedProjectId || !mailingMes || !mailingObjetivo.trim()) return;
+
+    const { data, error } = await supabase
+      .from("mailings_mensuales")
+      .insert({
+        id_campana: selectedProjectId,
+        mes_objetivo: mailingMes,
+        objetivo_correo: mailingObjetivo.trim(),
+        estado_envio: 'pendiente'
+      })
+      .select()
+      .single();
+
+    if (error) {
+      alert(`No se pudo guardar el mailing: ${error.message}`);
+      return;
+    }
+
+    if (data) {
+      setMailings([data as MailingMensual, ...mailings]);
+      setMailingMes('');
+      setMailingObjetivo('');
+    }
+  };
+
+  const toggleMailingStatus = async (mailing: MailingMensual) => {
+    const nextStatus = mailing.estado_envio === 'pendiente' ? 'enviado' : 'pendiente';
+    const { data } = await supabase
+      .from("mailings_mensuales")
+      .update({ estado_envio: nextStatus })
+      .eq("id", mailing.id)
+      .select()
+      .single();
+
+    if (data) {
+      setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
+    }
+  };
+
   // --- ALERTA VISUAL 48 HRS ---
   const isDelayed = (task: PersonalTask | RutaTask, cTime: number) => {
     if (task.priority !== 'NO_URGENTE' || task.status !== 'pending') return false;
@@ -258,6 +318,73 @@ export default function MisTareas() {
                </div>
              ))}
            </div>
+        </div>
+
+        {/* Mailings Mensuales */}
+        <div className="mb-14 bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
+          <h2 className="text-2xl font-bold mb-4">📧 Mailings Mensuales</h2>
+          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y marca si ya fue enviado.</p>
+
+          <div className="grid md:grid-cols-[220px_180px_1fr_auto] gap-3 mb-5">
+            <select
+              className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
+              value={mailingProject}
+              onChange={e => setMailingProject(e.target.value)}
+            >
+              <option value="">Selecciona proyecto</option>
+              {campanas.map(c => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </select>
+
+            <input
+              type="month"
+              className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
+              value={mailingMes}
+              onChange={e => setMailingMes(e.target.value)}
+            />
+
+            <input
+              type="text"
+              placeholder="Objetivo del correo mensual..."
+              className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
+              value={mailingObjetivo}
+              onChange={e => setMailingObjetivo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleCreateMailing(); }}
+            />
+
+            <button
+              onClick={handleCreateMailing}
+              className="bg-black dark:bg-white text-white dark:text-black font-semibold text-sm px-4 py-2 rounded-lg hover:opacity-90"
+            >
+              Guardar
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {mailings.map(m => {
+              const projectName = campanas.find(c => c.id === m.id_campana)?.nombre || 'Proyecto sin nombre';
+
+              return (
+                <div key={m.id} className="p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                  <div>
+                    <p className="font-semibold">{projectName} · {m.mes_objetivo}</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{m.objetivo_correo}</p>
+                  </div>
+
+                  <button
+                    onClick={() => toggleMailingStatus(m)}
+                    className={`shrink-0 text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                  >
+                    {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
+                  </button>
+                </div>
+              );
+            })}
+            {mailings.length === 0 && (
+              <div className="text-zinc-500 text-sm">Aún no tienes mailings cargados.</div>
+            )}
+          </div>
         </div>
 
         {/* 2. GRID DE CIUDADES */}
