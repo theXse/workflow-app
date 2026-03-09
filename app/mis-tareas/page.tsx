@@ -3,32 +3,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-type PersonalTask = {
-  id: string;
-  city: string;
-  project: string;
-  description: string;
-  priority: 'URGENTE' | 'NO_URGENTE';
-  status: 'pending' | 'completed';
-  created_at: string;
-};
-
+type PersonalTask = { id: string; city: string; project: string; description: string; priority: 'URGENTE' | 'NO_URGENTE'; status: 'pending' | 'completed'; created_at: string; };
 type Campana = { id: string; nombre: string; };
-
-type MailingMensual = {
-  id: string;
-  id_campana: string;
-  mes_objetivo: string;
-  objetivo_correo: string;
-  estado_envio: 'pendiente' | 'enviado';
-};
-
-type RutaTask = {
-  id: string;
-  description: string;
-  priority: 'URGENTE' | 'NO_URGENTE';
-  status: 'pending' | 'completed';
-};
+type MailingMensual = { id: string; id_campana: string; mes_objetivo: string; objetivo_correo: string; estado_envio: 'pendiente' | 'enviado'; isUrgent?: boolean; };
+type RutaTask = { id: string; description: string; priority: 'URGENTE' | 'NO_URGENTE'; status: 'pending' | 'completed'; };
 
 const AGENCY_STRUCTURE = [
   { city: "Osorno", projects: ["Portal Baquedano", "Jardines de Bellavista 3"] },
@@ -43,8 +21,6 @@ export default function MisTareas() {
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
   const [rutaTasks, setRutaTasks] = useState<RutaTask[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Formularios
   const [formDesc, setFormDesc] = useState<Record<string, string>>({});
   const [formPrio, setFormPrio] = useState<Record<string, string>>({});
   const [mailingProject, setMailingProject] = useState('');
@@ -52,6 +28,18 @@ export default function MisTareas() {
   const [mailingObjetivo, setMailingObjetivo] = useState('');
   const [rutaDesc, setRutaDesc] = useState("");
   const [rutaPrio, setRutaPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
+
+  // FUNCION PARA SABER SI ES ESTA SEMANA (Formato DD/MM)
+  const esEstaSemana = (fechaStr: string) => {
+    try {
+      const [dia, mes] = fechaStr.split('/').map(Number);
+      if (!dia || !mes) return false;
+      const hoy = new Date();
+      const fechaMeta = new Date(hoy.getFullYear(), mes - 1, dia);
+      const diferencia = (fechaMeta.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24);
+      return diferencia >= -1 && diferencia <= 7;
+    } catch { return false; }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,23 +52,27 @@ export default function MisTareas() {
       ]);
       if (t.data) setTasks(t.data);
       if (c.data) setCampanas(c.data);
-      if (m.data) setMailings(m.data);
+      if (m.data) {
+        // Ordenar: primero los de esta semana, luego el resto
+        const ordenados = m.data.sort((a, b) => {
+          const aUrgente = esEstaSemana(a.mes_objetivo) ? 1 : 0;
+          const bUrgente = esEstaSemana(b.mes_objetivo) ? 1 : 0;
+          return bUrgente - aUrgente;
+        });
+        setMailings(ordenados);
+      }
       if (r.data) setRutaTasks(r.data);
       setLoading(false);
     };
     fetchData();
   }, []);
 
-  // FUNCIONES DE TAREAS (CIUDADES)
   const handleCreateTask = async (city: string, project: string) => {
     const desc = formDesc[project];
     const prio = formPrio[project] || 'NO_URGENTE';
     if (!desc?.trim()) return;
     const { data } = await supabase.from("personal_tasks").insert({ city, project, description: desc, priority: prio, status: 'pending' }).select().single();
-    if (data) {
-      setTasks([...tasks, data]);
-      setFormDesc(prev => ({ ...prev, [project]: "" }));
-    }
+    if (data) { setTasks([...tasks, data]); setFormDesc(prev => ({ ...prev, [project]: "" })); }
   };
 
   const handleCompleteTask = async (id: string, currentStatus: string) => {
@@ -94,16 +86,19 @@ export default function MisTareas() {
     await supabase.from("personal_tasks").delete().eq("id", id);
   };
 
-  // FUNCIONES DE MAILINGS (FECHA DD/MM LIBRE)
   const handleCreateMailing = async () => {
     const selectedProject = mailingProject || campanas[0]?.nombre;
     const selectedCampana = campanas.find(c => c.nombre === selectedProject);
     if (!selectedCampana || !mailingMes || !mailingObjetivo.trim()) return;
     const { data } = await supabase.from("mailings_mensuales").insert({ id_campana: selectedCampana.id, mes_objetivo: mailingMes, objetivo_correo: mailingObjetivo, estado_envio: 'pendiente' }).select().single();
     if (data) {
-      setMailings([data, ...mailings]);
-      setMailingMes('');
-      setMailingObjetivo('');
+      const nuevos = [data, ...mailings].sort((a, b) => {
+        const aUrgente = esEstaSemana(a.mes_objetivo) ? 1 : 0;
+        const bUrgente = esEstaSemana(b.mes_objetivo) ? 1 : 0;
+        return bUrgente - aUrgente;
+      });
+      setMailings(nuevos);
+      setMailingMes(''); setMailingObjetivo('');
     }
   };
 
@@ -118,14 +113,10 @@ export default function MisTareas() {
     if (!error) setMailings(mailings.filter(m => m.id !== id));
   };
 
-  // FUNCIONES LA RUTA
   const handleCreateRuta = async () => {
     if (!rutaDesc.trim()) return;
     const { data } = await supabase.from("la_ruta_tasks").insert({ description: rutaDesc, priority: rutaPrio, status: 'pending' }).select().single();
-    if (data) {
-      setRutaTasks([...rutaTasks, data]);
-      setRutaDesc("");
-    }
+    if (data) { setRutaTasks([...rutaTasks, data]); setRutaDesc(""); }
   };
 
   const handleCompleteRuta = async (id: string, currentStatus: string) => {
@@ -139,7 +130,7 @@ export default function MisTareas() {
     await supabase.from("la_ruta_tasks").delete().eq("id", id);
   };
 
-  if (loading) return <div className="p-10 text-white bg-black min-h-screen">Cargando...</div>;
+  if (loading) return <div className="p-10 text-white bg-black min-h-screen">Cargando tablero...</div>;
 
   return (
     <div className="min-h-screen bg-black p-6 md:p-10 font-sans text-white">
@@ -159,20 +150,26 @@ export default function MisTareas() {
             <button onClick={handleCreateMailing} className="bg-white text-black font-bold px-4 py-2 rounded-lg">Guardar</button>
           </div>
           <div className="space-y-3">
-            {mailings.map(m => (
-              <div key={m.id} className="p-4 rounded-xl border border-zinc-800 bg-zinc-950 flex justify-between items-center">
-                <div className="flex-1">
-                  <p className="font-semibold text-blue-400">{campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo}</p>
-                  <p className="text-sm text-zinc-400">{m.objetivo_correo}</p>
+            {mailings.map(m => {
+              const esUrgente = esEstaSemana(m.mes_objetivo) && m.estado_envio === 'pendiente';
+              return (
+                <div key={m.id} className={`p-4 rounded-xl border transition-all flex justify-between items-center ${esUrgente ? "border-red-500 bg-red-950/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]" : "border-zinc-800 bg-zinc-950"}`}>
+                  <div className="flex-1">
+                    <p className={`font-semibold ${esUrgente ? "text-red-400" : "text-blue-400"}`}>
+                      {campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo}
+                      {esUrgente && <span className="ml-2 text-[10px] bg-red-600 text-white px-2 py-0.5 rounded-full animate-pulse">ENVIAR ESTA SEMANA</span>}
+                    </p>
+                    <p className="text-sm text-zinc-400">{m.objetivo_correo}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => toggleMailingStatus(m)} className={`text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-900 text-green-400' : 'bg-amber-900 text-amber-400'}`}>
+                      {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
+                    </button>
+                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => toggleMailingStatus(m)} className={`text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-900 text-green-400' : 'bg-amber-900 text-amber-400'}`}>
-                    {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
-                  </button>
-                  <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -189,10 +186,10 @@ export default function MisTareas() {
                       <div className="p-4 bg-zinc-950/50 flex justify-between items-center"><h3 className="font-bold">{projectName}</h3></div>
                       <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-zinc-950/20">
                         {projectTasks.map(task => (
-                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 transition-all ${task.status === 'completed' ? "bg-zinc-900 opacity-40" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2" : "bg-zinc-800 border-zinc-700"}`}>
+                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 transition-all ${task.status === 'completed' ? "bg-zinc-900 opacity-40" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2 shadow-[0_0_10px_rgba(239,68,68,0.2)]" : "bg-zinc-800 border-zinc-700"}`}>
                             <div className="flex gap-2 min-w-0 flex-1">
                               <button onClick={() => handleCompleteTask(task.id, task.status)} className={`mt-1 w-5 h-5 rounded-full border shrink-0 flex items-center justify-center ${task.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500"}`}>
-                                {task.status === 'completed' && <span className="text-[10px]">✓</span>}
+                                {task.status === 'completed' && <span className="text-[10px] text-white">✓</span>}
                               </button>
                               <p className={`text-sm break-words ${task.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{task.description}</p>
                             </div>
@@ -201,7 +198,7 @@ export default function MisTareas() {
                         ))}
                       </div>
                       <div className="p-4 border-t border-zinc-800 bg-zinc-900 space-y-3">
-                        <input type="text" placeholder="Tarea..." className="w-full text-sm p-2 rounded-lg border border-zinc-700 bg-zinc-800 text-white" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleCreateTask(cityGroup.city, projectName)} />
+                        <input type="text" placeholder="Tarea..." className="w-full text-sm p-2 rounded-lg border border-zinc-700 bg-zinc-800 text-white placeholder:text-zinc-500" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} onKeyDown={e => e.key === 'Enter' && handleCreateTask(cityGroup.city, projectName)} />
                         <div className="flex gap-2">
                           <select className="flex-1 text-xs p-2 rounded-lg border border-zinc-700 bg-zinc-800 text-white" value={formPrio[projectName] || "NO_URGENTE"} onChange={e => setFormPrio({ ...formPrio, [projectName]: e.target.value })}>
                             <option value="NO_URGENTE">Estándar</option><option value="URGENTE">URGENTE 🔥</option>
@@ -232,7 +229,7 @@ export default function MisTareas() {
               <div key={t.id} className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${t.status === 'completed' ? "bg-zinc-950 opacity-40" : t.priority === 'URGENTE' ? "bg-red-950/30 border-red-500" : "bg-zinc-900 border-zinc-800"}`}>
                 <div className="flex gap-4 items-center flex-1">
                   <button onClick={() => handleCompleteRuta(t.id, t.status)} className={`w-6 h-6 rounded-full border flex items-center justify-center ${t.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500"}`}>
-                    {t.status === 'completed' && <span>✓</span>}
+                    {t.status === 'completed' && <span className="text-white">✓</span>}
                   </button>
                   <p className={`text-lg ${t.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{t.description}</p>
                 </div>
@@ -241,7 +238,6 @@ export default function MisTareas() {
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );
