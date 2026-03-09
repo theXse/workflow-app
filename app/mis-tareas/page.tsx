@@ -156,14 +156,12 @@ export default function MisTareas() {
         await handleCreateMailing();
       }
 
-      await fetchData(false);
-
       const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
       setCurrentTime(Date.now());
       setLastSavedAt(now);
       window.localStorage.setItem('mis_tareas_last_saved_at', now);
       setSaveNoticeType('success');
-      setSaveNotice('✅ Cambios guardados y sincronizados correctamente.');
+      setSaveNotice('✅ Cambios guardados correctamente.');
     } catch {
       setSaveNoticeType('error');
       setSaveNotice('❌ No se pudo guardar. Revisa conexión/permisos y vuelve a intentar.');
