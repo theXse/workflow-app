@@ -91,13 +91,15 @@ export default function MisTareas() {
   const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
+  const [saveNoticeType, setSaveNoticeType] = useState<'success' | 'error'>('success');
+  const [isSaving, setIsSaving] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState(() => {
     if (typeof window === 'undefined') return '';
     return window.localStorage.getItem('mis_tareas_last_saved_at') || '';
   });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
 
     const [
       { data: tData },
@@ -124,7 +126,7 @@ export default function MisTareas() {
     }
     if (mData) setMailings(mData as MailingMensual[]);
 
-    setLoading(false);
+    if (showLoader) setLoading(false);
     setCurrentTime(Date.now());
   }, []);
 
@@ -137,13 +139,38 @@ export default function MisTareas() {
   }, [fetchData]);
 
 
-  const handleGuardarCambios = () => {
-    const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
-    setCurrentTime(Date.now());
-    setLastSavedAt(now);
-    window.localStorage.setItem('mis_tareas_last_saved_at', now);
-    setSaveNotice("✅ Cambios guardados. Todo se persiste automáticamente en la base de datos.");
-    setTimeout(() => setSaveNotice(''), 3500);
+  const handleGuardarCambios = async () => {
+    setIsSaving(true);
+
+    try {
+      const hasMailingDraft = Boolean(mailingProject || mailingFechaEnvio || mailingObjetivo.trim());
+      const mailingDraftIsComplete = Boolean((mailingProject || campanas[0]?.nombre) && mailingFechaEnvio && mailingObjetivo.trim());
+
+      if (hasMailingDraft && !mailingDraftIsComplete) {
+        setSaveNoticeType('error');
+        setSaveNotice('⚠️ Tienes un mailing incompleto. Completa proyecto, fecha DD/MM y objetivo antes de guardar.');
+        return;
+      }
+
+      if (mailingDraftIsComplete) {
+        await handleCreateMailing();
+      }
+
+      await fetchData(false);
+
+      const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      setCurrentTime(Date.now());
+      setLastSavedAt(now);
+      window.localStorage.setItem('mis_tareas_last_saved_at', now);
+      setSaveNoticeType('success');
+      setSaveNotice('✅ Cambios guardados y sincronizados correctamente.');
+    } catch {
+      setSaveNoticeType('error');
+      setSaveNotice('❌ No se pudo guardar. Revisa conexión/permisos y vuelve a intentar.');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveNotice(''), 4000);
+    }
   };
 
   // --- ACCIONES TAREAS ---
@@ -247,10 +274,14 @@ export default function MisTareas() {
   // --- MAILINGS MENSUALES ---
   const handleCreateMailing = async () => {
     const selectedProject = mailingProject || campanas[0]?.nombre;
-    if (!selectedProject || !mailingFechaEnvio || !mailingObjetivo.trim()) return;
+    if (!selectedProject || !mailingFechaEnvio || !mailingObjetivo.trim()) {
+      throw new Error('Mailing incompleto');
+    }
 
     const selectedCampana = campanas.find(c => c.nombre === selectedProject);
-    if (!selectedCampana) return;
+    if (!selectedCampana) {
+      throw new Error('Campaña no encontrada');
+    }
 
     const { data } = await supabase
       .from("mailings_mensuales")
@@ -263,11 +294,13 @@ export default function MisTareas() {
       .select()
       .single();
 
-    if (data) {
-      setMailings([data as MailingMensual, ...mailings]);
-      setMailingFechaEnvio('');
-      setMailingObjetivo('');
+    if (!data) {
+      throw new Error('No se pudo guardar mailing');
     }
+
+    setMailings([data as MailingMensual, ...mailings]);
+    setMailingFechaEnvio('');
+    setMailingObjetivo('');
   };
 
   const toggleMailingStatus = async (mailing: MailingMensual) => {
@@ -309,10 +342,11 @@ export default function MisTareas() {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={handleGuardarCambios}
-                className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+                onClick={() => void handleGuardarCambios()}
+                disabled={isSaving}
+                className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
               >
-                💾 Guardar cambios
+                {isSaving ? 'Guardando...' : '💾 Guardar cambios'}
               </button>
               <button
                 type="button"
@@ -322,7 +356,7 @@ export default function MisTareas() {
                 🗑 Limpiar Mes (Borrar Completadas)
               </button>
             </div>
-            {saveNotice && <p className="text-sm text-emerald-600 dark:text-emerald-400">{saveNotice}</p>}
+            {saveNotice && <p className={`text-sm ${saveNoticeType === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{saveNotice}</p>}
             {lastSavedAt && <p className="text-xs text-zinc-500">Último guardado: {lastSavedAt}</p>}
           </div>
         </div>
