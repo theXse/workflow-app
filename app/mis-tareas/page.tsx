@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type PersonalTask = {
@@ -88,44 +88,90 @@ export default function MisTareas() {
   const [campanas, setCampanas] = useState<Campana[]>([]);
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
   const [mailingProject, setMailingProject] = useState('');
-  const [mailingMes, setMailingMes] = useState('');
+  const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
+  const [saveNoticeType, setSaveNoticeType] = useState<'success' | 'error'>('success');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('mis_tareas_last_saved_at') || '';
+  });
+
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+
+    const [
+      { data: tData },
+      { data: pData },
+      { data: fData },
+      { data: rData },
+      { data: cData },
+      { data: mData }
+    ] = await Promise.all([
+      supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("project_status").select("*").order("project_name", { ascending: true }),
+      supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
+      supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
+      supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
+    ]);
+
+    if (tData) setTasks(tData as PersonalTask[]);
+    if (pData) setProjectStatuses(pData as ProjectStatus[]);
+    if (fData) setFocuses(fData as ProjectFocus[]);
+    if (rData) setRutaTasks(rData as RutaTask[]);
+    if (cData) {
+      setCampanas(cData as Campana[]);
+    }
+    if (mData) setMailings(mData as MailingMensual[]);
+
+    if (showLoader) setLoading(false);
+    setCurrentTime(Date.now());
+  }, []);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const timer = setTimeout(() => {
+      void fetchData();
+    }, 0);
 
-      const [
-        { data: tData },
-        { data: pData },
-        { data: fData },
-        { data: rData },
-        { data: cData },
-        { data: mData }
-      ] = await Promise.all([
-        supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("project_status").select("*").order("project_name", { ascending: true }),
-        supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
-        supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
-        supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
-      ]);
-      
-      if (tData) setTasks(tData as PersonalTask[]);
-      if (pData) setProjectStatuses(pData as ProjectStatus[]);
-      if (fData) setFocuses(fData as ProjectFocus[]);
-      if (rData) setRutaTasks(rData as RutaTask[]);
-      if (cData) {
-        setCampanas(cData as Campana[]);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
+
+
+  const handleGuardarCambios = async () => {
+    setIsSaving(true);
+
+    try {
+      const hasMailingDraft = Boolean(mailingProject || mailingFechaEnvio || mailingObjetivo.trim());
+      const mailingDraftIsComplete = Boolean((mailingProject || campanas[0]?.nombre) && mailingFechaEnvio && mailingObjetivo.trim());
+
+      if (hasMailingDraft && !mailingDraftIsComplete) {
+        setSaveNoticeType('error');
+        setSaveNotice('⚠️ Tienes un mailing incompleto. Completa proyecto, fecha DD/MM y objetivo antes de guardar.');
+        return;
       }
-      if (mData) setMailings(mData as MailingMensual[]);
-      
-      setLoading(false);
-      setCurrentTime(Date.now());
-    };
 
-    fetchData();
-  }, []);
+      if (mailingDraftIsComplete) {
+        await handleCreateMailing();
+      }
+
+      await fetchData(false);
+
+      const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      setCurrentTime(Date.now());
+      setLastSavedAt(now);
+      window.localStorage.setItem('mis_tareas_last_saved_at', now);
+      setSaveNoticeType('success');
+      setSaveNotice('✅ Cambios guardados y sincronizados correctamente.');
+    } catch {
+      setSaveNoticeType('error');
+      setSaveNotice('❌ No se pudo guardar. Revisa conexión/permisos y vuelve a intentar.');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveNotice(''), 4000);
+    }
+  };
 
   // --- ACCIONES TAREAS ---
   const handleCreateTask = async (city: string, project: string) => {
@@ -228,27 +274,33 @@ export default function MisTareas() {
   // --- MAILINGS MENSUALES ---
   const handleCreateMailing = async () => {
     const selectedProject = mailingProject || campanas[0]?.nombre;
-    if (!selectedProject || !mailingMes || !mailingObjetivo.trim()) return;
+    if (!selectedProject || !mailingFechaEnvio || !mailingObjetivo.trim()) {
+      throw new Error('Mailing incompleto');
+    }
 
     const selectedCampana = campanas.find(c => c.nombre === selectedProject);
-    if (!selectedCampana) return;
+    if (!selectedCampana) {
+      throw new Error('Campaña no encontrada');
+    }
 
     const { data } = await supabase
       .from("mailings_mensuales")
       .insert({
         id_campana: selectedCampana.id,
-        mes_objetivo: mailingMes,
+        mes_objetivo: mailingFechaEnvio,
         objetivo_correo: mailingObjetivo,
         estado_envio: 'pendiente'
       })
       .select()
       .single();
 
-    if (data) {
-      setMailings([data as MailingMensual, ...mailings]);
-      setMailingMes('');
-      setMailingObjetivo('');
+    if (!data) {
+      throw new Error('No se pudo guardar mailing');
     }
+
+    setMailings([data as MailingMensual, ...mailings]);
+    setMailingFechaEnvio('');
+    setMailingObjetivo('');
   };
 
   const toggleMailingStatus = async (mailing: MailingMensual) => {
@@ -263,6 +315,11 @@ export default function MisTareas() {
     if (data) {
       setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
     }
+  };
+
+  const handleDeleteMailing = async (mailingId: string) => {
+    setMailings(mailings.filter(m => m.id !== mailingId));
+    await supabase.from("mailings_mensuales").delete().eq("id", mailingId);
   };
 
   // --- ALERTA VISUAL 48 HRS ---
@@ -281,12 +338,27 @@ export default function MisTareas() {
         {/* ENCABEZADO Y BOTON LMPIEZA */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <h1 className="text-4xl font-extrabold tracking-tight">Mis Tareas Personales</h1>
-          <button 
-            onClick={handleLimpiarMes}
-            className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
-          >
-            🗑 Limpiar Mes (Borrar Completadas)
-          </button>
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleGuardarCambios()}
+                disabled={isSaving}
+                className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                {isSaving ? 'Guardando...' : '💾 Guardar cambios'}
+              </button>
+              <button
+                type="button"
+                onClick={handleLimpiarMes}
+                className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                🗑 Limpiar Mes (Borrar Completadas)
+              </button>
+            </div>
+            {saveNotice && <p className={`text-sm ${saveNoticeType === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{saveNotice}</p>}
+            {lastSavedAt && <p className="text-xs text-zinc-500">Último guardado: {lastSavedAt}</p>}
+          </div>
         </div>
         <p className="text-zinc-500 mb-8 text-lg">Organiza y prioriza tu flujo de trabajo de la agencia.</p>
 
@@ -317,7 +389,7 @@ export default function MisTareas() {
         {/* Mailings Mensuales */}
         <div className="mb-14 bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-2xl font-bold mb-4">📧 Mailings Mensuales</h2>
-          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y marca si ya fue enviado.</p>
+          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y define el día y mes en que debe enviarse.</p>
 
           <div className="grid md:grid-cols-[220px_180px_1fr_auto] gap-3 mb-5">
             <select
@@ -332,10 +404,14 @@ export default function MisTareas() {
             </select>
 
             <input
-              type="month"
+              type="text"
+              placeholder="DD/MM"
               className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
-              value={mailingMes}
-              onChange={e => setMailingMes(e.target.value)}
+              value={mailingFechaEnvio}
+              onChange={e => {
+                const cleanValue = e.target.value.replace(/[^\d/]/g, '');
+                if (cleanValue.length <= 5) setMailingFechaEnvio(cleanValue);
+              }}
             />
 
             <input
@@ -366,12 +442,22 @@ export default function MisTareas() {
                     <p className="text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{m.objetivo_correo}</p>
                   </div>
 
-                  <button
-                    onClick={() => toggleMailingStatus(m)}
-                    className={`shrink-0 text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
-                  >
-                    {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0"> 
+                    <button
+                      onClick={() => toggleMailingStatus(m)}
+                      className={`text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                    >
+                      {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMailing(m.id)}
+                      className="text-xs font-bold px-3 py-2 rounded-lg border border-red-200 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-900/50 dark:bg-red-900/30 dark:text-red-300"
+                      title="Eliminar mailing"
+                      aria-label="Borrar mailing"
+                    >
+                      🗑 Borrar
+                    </button>
+                  </div>
                 </div>
               );
             })}
