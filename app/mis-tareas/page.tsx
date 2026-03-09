@@ -204,10 +204,11 @@ export default function MisTareas() {
     }
   };
 
-  const notifyPersistenceError = (message: string) => {
+  const notifyPersistenceError = (message: string, detail?: string) => {
+    const fullMessage = detail ? `${message} (${detail})` : message;
     setSaveNoticeType('error');
-    setSaveNotice(message);
-    setTimeout(() => setSaveNotice(''), 4500);
+    setSaveNotice(fullMessage);
+    setTimeout(() => setSaveNotice(''), 6500);
   };
 
   // --- ACCIONES TAREAS ---
@@ -398,9 +399,13 @@ export default function MisTareas() {
 
       if (fallbackError) {
         setMailings(previous);
-        notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.');
+        const detail = fallbackError.message || error.message || 'Revisa políticas RLS de DELETE/UPDATE en mailings_mensuales';
+        console.error('Mailing delete failed', { deleteError: error, fallbackError, mailingId });
+        notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.', detail);
         return;
       }
+
+      console.warn('DELETE bloqueado; aplicado soft-delete para mailing', { mailingId, deleteError: error.message });
     }
 
     setMailings(previous.filter(m => m.id !== mailingId));
