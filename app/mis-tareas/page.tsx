@@ -47,6 +47,28 @@ type MailingMensual = {
   estado_envio: 'pendiente' | 'enviado';
 };
 
+const getStoredString = (key: string) => {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(key) || '';
+};
+
+const getStoredRecord = (key: string): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  const value = window.localStorage.getItem(key);
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as Record<string, string>;
+  } catch {
+    return {};
+  }
+};
+
+const getStoredRutaPrio = () => {
+  if (typeof window === 'undefined') return 'NO_URGENTE' as const;
+  const value = window.localStorage.getItem('mis_tareas_ruta_prio');
+  return value === 'URGENTE' ? 'URGENTE' : 'NO_URGENTE';
+};
+
 const AGENCY_STRUCTURE = [
   {
     city: "Osorno",
@@ -72,24 +94,24 @@ export default function MisTareas() {
   const [loading, setLoading] = useState(true);
 
   // Formularios Proyectos
-  const [formDesc, setFormDesc] = useState<Record<string, string>>({});
-  const [formPrio, setFormPrio] = useState<Record<string, string>>({});
+  const [formDesc, setFormDesc] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_desc'));
+  const [formPrio, setFormPrio] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_prio'));
   
   // Nuevos Focos Dinámicos Modulares
   const [focuses, setFocuses] = useState<ProjectFocus[]>([]);
-  const [formFocus, setFormFocus] = useState<Record<string, string>>({});
+  const [formFocus, setFormFocus] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_focus'));
 
   // Sección La Ruta
   const [rutaTasks, setRutaTasks] = useState<RutaTask[]>([]);
-  const [rutaFormDesc, setRutaFormDesc] = useState("");
-  const [rutaFormPrio, setRutaFormPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
+  const [rutaFormDesc, setRutaFormDesc] = useState(() => getStoredString('mis_tareas_ruta_desc'));
+  const [rutaFormPrio, setRutaFormPrio] = useState<'URGENTE' | 'NO_URGENTE'>(() => getStoredRutaPrio());
 
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [campanas, setCampanas] = useState<Campana[]>([]);
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
-  const [mailingProject, setMailingProject] = useState('');
-  const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
-  const [mailingObjetivo, setMailingObjetivo] = useState('');
+  const [mailingProject, setMailingProject] = useState(() => getStoredString('mis_tareas_mailing_project'));
+  const [mailingFechaEnvio, setMailingFechaEnvio] = useState(() => getStoredString('mis_tareas_mailing_fecha'));
+  const [mailingObjetivo, setMailingObjetivo] = useState(() => getStoredString('mis_tareas_mailing_objetivo'));
   const [saveNotice, setSaveNotice] = useState('');
   const [saveNoticeType, setSaveNoticeType] = useState<'success' | 'error'>('success');
   const [isSaving, setIsSaving] = useState(false);
@@ -142,13 +164,22 @@ export default function MisTareas() {
   const handleGuardarCambios = async () => {
     setIsSaving(true);
 
+    window.localStorage.setItem('mis_tareas_form_desc', JSON.stringify(formDesc));
+    window.localStorage.setItem('mis_tareas_form_prio', JSON.stringify(formPrio));
+    window.localStorage.setItem('mis_tareas_form_focus', JSON.stringify(formFocus));
+    window.localStorage.setItem('mis_tareas_ruta_desc', rutaFormDesc);
+    window.localStorage.setItem('mis_tareas_ruta_prio', rutaFormPrio);
+    window.localStorage.setItem('mis_tareas_mailing_project', mailingProject);
+    window.localStorage.setItem('mis_tareas_mailing_fecha', mailingFechaEnvio);
+    window.localStorage.setItem('mis_tareas_mailing_objetivo', mailingObjetivo);
+
     try {
       const hasMailingDraft = Boolean(mailingProject || mailingFechaEnvio || mailingObjetivo.trim());
       const mailingDraftIsComplete = Boolean((mailingProject || campanas[0]?.nombre) && mailingFechaEnvio && mailingObjetivo.trim());
 
       if (hasMailingDraft && !mailingDraftIsComplete) {
         setSaveNoticeType('error');
-        setSaveNotice('⚠️ Tienes un mailing incompleto. Completa proyecto, fecha DD/MM y objetivo antes de guardar.');
+        setSaveNotice('⚠️ Borrador guardado localmente. Para enviarlo a base de datos, completa proyecto, fecha DD/MM y objetivo.');
         return;
       }
 
@@ -161,7 +192,7 @@ export default function MisTareas() {
       setLastSavedAt(now);
       window.localStorage.setItem('mis_tareas_last_saved_at', now);
       setSaveNoticeType('success');
-      setSaveNotice('✅ Cambios guardados correctamente.');
+      setSaveNotice('✅ Cambios guardados. (Borradores locales + datos enviados)');
     } catch {
       setSaveNoticeType('error');
       setSaveNotice('❌ No se pudo guardar. Revisa conexión/permisos y vuelve a intentar.');
