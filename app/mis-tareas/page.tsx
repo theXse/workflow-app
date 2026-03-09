@@ -29,6 +29,7 @@ export default function MisTareas() {
   const [mailingObjetivo, setMailingObjetivo] = useState('');
   const [rutaDesc, setRutaDesc] = useState("");
   const [rutaPrio, setRutaPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
+  const [isListening, setIsListening] = useState(false);
 
   const esEstaSemana = (fechaStr: string) => {
     try {
@@ -53,11 +54,7 @@ export default function MisTareas() {
       if (t.data) setTasks(t.data);
       if (c.data) setCampanas(c.data);
       if (m.data) {
-        const ordenados = m.data.sort((a, b) => {
-          const aUrgente = esEstaSemana(a.mes_objetivo) && a.estado_envio === 'pendiente' ? 1 : 0;
-          const bUrgente = esEstaSemana(b.mes_objetivo) && b.estado_envio === 'pendiente' ? 1 : 0;
-          return bUrgente - aUrgente;
-        });
+        const ordenados = m.data.sort((a, b) => (esEstaSemana(b.mes_objetivo) && b.estado_envio === 'pendiente' ? 1 : 0) - (esEstaSemana(a.mes_objetivo) && a.estado_envio === 'pendiente' ? 1 : 0));
         setMailings(ordenados);
       }
       if (r.data) setRutaTasks(r.data);
@@ -66,11 +63,21 @@ export default function MisTareas() {
     fetchData();
   }, []);
 
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("Tu navegador no soporta dictado por voz.");
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    recognition.onresult = (e: any) => setRutaDesc(e.results[0][0].transcript);
+    recognition.start();
+  };
+
   const handleCreateTask = async (city: string, project: string) => {
     const desc = formDesc[project];
-    const prio = formPrio[project] || 'NO_URGENTE';
     if (!desc?.trim()) return;
-    const { data } = await supabase.from("personal_tasks").insert({ city, project, description: desc, priority: prio, status: 'pending' }).select().single();
+    const { data } = await supabase.from("personal_tasks").insert({ city, project, description: desc, priority: formPrio[project] || 'NO_URGENTE', status: 'pending' }).select().single();
     if (data) { setTasks([...tasks, data]); setFormDesc(prev => ({ ...prev, [project]: "" })); }
   };
 
@@ -86,25 +93,21 @@ export default function MisTareas() {
   };
 
   const handleCreateMailing = async () => {
-    const selectedProject = mailingProject || campanas[0]?.nombre;
-    const selectedCampana = campanas.find(c => c.nombre === selectedProject);
+    const selectedCampana = campanas.find(c => c.nombre === (mailingProject || campanas[0]?.nombre));
     if (!selectedCampana || !mailingMes || !mailingObjetivo.trim()) return;
     const { data } = await supabase.from("mailings_mensuales").insert({ id_campana: selectedCampana.id, mes_objetivo: mailingMes, objetivo_correo: mailingObjetivo, estado_envio: 'pendiente' }).select().single();
-    if (data) {
-      setMailings([data, ...mailings].sort((a, b) => (esEstaSemana(b.mes_objetivo) ? 1 : 0) - (esEstaSemana(a.mes_objetivo) ? 1 : 0)));
-      setMailingMes(''); setMailingObjetivo('');
-    }
+    if (data) { setMailings([data, ...mailings]); setMailingMes(''); setMailingObjetivo(''); }
   };
 
-  const toggleMailingStatus = async (mailing: MailingMensual) => {
-    const nextStatus = mailing.estado_envio === 'pendiente' ? 'enviado' : 'pendiente';
-    const { data } = await supabase.from("mailings_mensuales").update({ estado_envio: nextStatus }).eq("id", mailing.id).select().single();
-    if (data) setMailings(mailings.map(m => (m.id === mailing.id ? data : m)));
+  const toggleMailingStatus = async (m: MailingMensual) => {
+    const next = m.estado_envio === 'pendiente' ? 'enviado' : 'pendiente';
+    const { data } = await supabase.from("mailings_mensuales").update({ estado_envio: next }).eq("id", m.id).select().single();
+    if (data) setMailings(mailings.map(item => item.id === m.id ? data : item));
   };
 
   const handleDeleteMailing = async (id: string) => {
-    const { error } = await supabase.from("mailings_mensuales").delete().eq("id", id);
-    if (!error) setMailings(mailings.filter(m => m.id !== id));
+    await supabase.from("mailings_mensuales").delete().eq("id", id);
+    setMailings(mailings.filter(m => m.id !== id));
   };
 
   const handleCreateRuta = async () => {
@@ -114,9 +117,9 @@ export default function MisTareas() {
   };
 
   const handleCompleteRuta = async (id: string, currentStatus: string) => {
-    const nextStatus = currentStatus === 'completed' ? 'pending' : 'completed';
-    setRutaTasks(rutaTasks.map(t => t.id === id ? { ...t, status: nextStatus } : t));
-    await supabase.from("la_ruta_tasks").update({ status: nextStatus }).eq("id", id);
+    const next = currentStatus === 'completed' ? 'pending' : 'completed';
+    setRutaTasks(rutaTasks.map(t => t.id === id ? { ...t, status: next } : t));
+    await supabase.from("la_ruta_tasks").update({ status: next }).eq("id", id);
   };
 
   const handleDeleteRuta = async (id: string) => {
@@ -128,40 +131,37 @@ export default function MisTareas() {
 
   return (
     <div className="min-h-screen bg-black p-4 md:p-10 font-sans text-white">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto pb-20">
         <h1 className="text-3xl md:text-4xl font-extrabold mb-8 text-center md:text-left">Mis Tareas Personales</h1>
 
-        {/* MAILINGS - MOBILE OPTIMIZED */}
+        {/* SECCIÓN MAILINGS */}
         <div className="mb-10 bg-zinc-900 rounded-2xl p-4 md:p-6 border border-zinc-800">
-          <h2 className="text-xl md:text-2xl font-bold mb-4 flex items-center gap-2">📧 Mailings Mensuales</h2>
+          <h2 className="text-xl font-bold mb-4">📧 Mailings Mensuales</h2>
           <div className="flex flex-col gap-3 mb-6">
             <div className="grid grid-cols-2 gap-3">
-              <select className="p-3 rounded-lg border border-zinc-700 bg-zinc-800 text-white text-sm" value={mailingProject || campanas[0]?.nombre || ''} onChange={e => setMailingProject(e.target.value)}>
+              <select className="p-3 rounded-lg bg-zinc-800 text-white text-sm" value={mailingProject} onChange={e => setMailingProject(e.target.value)}>
                 <option value="">Proyecto</option>
-                {campanas.map(c => (<option key={c.id} value={c.nombre}>{c.nombre}</option>))}
+                {campanas.map(c => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
               </select>
-              <input type="text" placeholder="DD/MM" className="p-3 rounded-lg border border-zinc-700 bg-zinc-800 text-white text-sm" value={mailingMes} onChange={e => setMailingMes(e.target.value)} />
+              <input type="text" placeholder="DD/MM" className="p-3 rounded-lg bg-zinc-800 text-white text-sm" value={mailingMes} onChange={e => setMailingMes(e.target.value)} />
             </div>
-            <input type="text" placeholder="Objetivo del correo..." className="p-3 rounded-lg border border-zinc-700 bg-zinc-800 text-white text-sm" value={mailingObjetivo} onChange={e => setMailingObjetivo(e.target.value)} />
-            <button onClick={handleCreateMailing} className="bg-white text-black font-bold p-3 rounded-lg w-full md:w-auto">Guardar Mailing</button>
+            <input type="text" placeholder="Objetivo..." className="p-3 rounded-lg bg-zinc-800 text-white text-sm" value={mailingObjetivo} onChange={e => setMailingObjetivo(e.target.value)} />
+            <button onClick={handleCreateMailing} className="bg-white text-black font-bold p-3 rounded-lg">Guardar</button>
           </div>
-
           <div className="space-y-3">
             {mailings.map(m => {
-              const urg = esEstaSemana(m.mes_objetivo) && m.estado_envio === 'pendiente';
+              const isUrgent = esEstaSemana(m.mes_objetivo) && m.estado_envio === 'pendiente';
               return (
-                <div key={m.id} className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${urg ? "border-red-500 bg-red-950/20 shadow-lg" : "border-zinc-800 bg-zinc-950"}`}>
-                  <div className="flex-1">
-                    <p className={`font-bold text-sm md:text-base ${urg ? "text-red-400" : "text-blue-400"}`}>
-                      {campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo}
-                    </p>
-                    <p className="text-xs md:text-sm text-zinc-400 mt-1">{m.objetivo_correo}</p>
+                <div key={m.id} className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between gap-4 ${isUrgent ? "border-red-500 bg-red-950/20" : "border-zinc-800 bg-zinc-950"}`}>
+                  <div>
+                    <p className={`font-bold ${isUrgent ? "text-red-400" : "text-blue-400"}`}>{campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo}</p>
+                    <p className="text-xs text-zinc-400 mt-1">{m.objetivo_correo}</p>
                   </div>
-                  <div className="flex items-center justify-between w-full sm:w-auto gap-4 border-t sm:border-t-0 border-zinc-800 pt-3 sm:pt-0">
-                    <button onClick={() => toggleMailingStatus(m)} className={`text-[10px] md:text-xs font-bold px-4 py-2 rounded-full ${m.estado_envio === 'enviado' ? 'bg-green-900 text-green-400' : 'bg-amber-900 text-amber-400'}`}>
+                  <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto">
+                    <button onClick={() => toggleMailingStatus(m)} className={`text-[10px] font-bold px-4 py-2 rounded-full ${m.estado_envio === 'enviado' ? 'bg-green-900 text-green-400' : 'bg-amber-900 text-amber-400'}`}>
                       {m.estado_envio === 'enviado' ? 'ENVIADO' : 'PENDIENTE'}
                     </button>
-                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 p-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                   </div>
                 </div>
               );
@@ -169,37 +169,37 @@ export default function MisTareas() {
           </div>
         </div>
 
-        {/* CIUDADES - RESPONSIVE GRID */}
+        {/* CIUDADES - TARJETAS MÁS CORTAS (350px) */}
         <div className="space-y-12">
           {AGENCY_STRUCTURE.map(cityGroup => (
             <div key={cityGroup.city} className="space-y-6">
-              <h2 className="text-2xl md:text-3xl font-bold border-b border-zinc-800 pb-2 text-blue-500">📍 {cityGroup.city}</h2>
+              <h2 className="text-2xl font-bold border-b border-zinc-800 pb-2 text-blue-500">📍 {cityGroup.city}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {cityGroup.projects.map(projectName => {
                   const projectTasks = tasks.filter(t => t.project === projectName);
                   return (
-                    <div key={projectName} className="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-[500px] md:h-[600px]">
-                      <div className="p-4 bg-zinc-950/50 flex justify-between items-center"><h3 className="font-bold text-sm md:text-base">{projectName}</h3></div>
+                    <div key={projectName} className="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-[350px]">
+                      <div className="p-4 bg-zinc-950/50 flex justify-between items-center"><h3 className="font-bold text-sm">{projectName}</h3></div>
                       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-950/20">
                         {projectTasks.map(task => (
-                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 ${task.status === 'completed' ? "bg-zinc-900 opacity-40" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2" : "bg-zinc-800 border-zinc-700"}`}>
+                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 ${task.status === 'completed' ? "bg-zinc-900 opacity-40" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2 shadow-lg" : "bg-zinc-800 border-zinc-700"}`}>
                             <div className="flex gap-3 min-w-0 flex-1">
                               <button onClick={() => handleCompleteTask(task.id, task.status)} className={`mt-0.5 w-6 h-6 rounded-full border shrink-0 flex items-center justify-center ${task.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500"}`}>
-                                {task.status === 'completed' && <span className="text-[10px] text-white">✓</span>}
+                                {task.status === 'completed' && <span className="text-white text-[10px]">✓</span>}
                               </button>
-                              <p className={`text-sm md:text-base break-words ${task.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{task.description}</p>
+                              <p className={`text-sm break-words ${task.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{task.description}</p>
                             </div>
-                            <button onClick={() => handleDeleteTask(task.id)} className="text-zinc-600 hover:text-red-500 pt-1"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                            <button onClick={() => handleDeleteTask(task.id)} className="text-zinc-600 hover:text-red-500"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                           </div>
                         ))}
                       </div>
-                      <div className="p-4 border-t border-zinc-800 bg-zinc-900 space-y-3">
-                        <input type="text" placeholder="Nueva tarea..." className="w-full text-sm p-3 rounded-lg border border-zinc-700 bg-zinc-800 text-white" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} />
+                      <div className="p-4 border-t border-zinc-800 bg-zinc-900 space-y-2">
+                        <input type="text" placeholder="Tarea..." className="w-full text-xs p-2 rounded-lg bg-zinc-800 text-white" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} />
                         <div className="flex gap-2">
-                          <select className="flex-1 text-xs p-3 rounded-lg border border-zinc-700 bg-zinc-800 text-white" value={formPrio[projectName] || "NO_URGENTE"} onChange={e => setFormPrio({ ...formPrio, [projectName]: e.target.value })}>
+                          <select className="flex-1 text-[10px] p-2 rounded-lg bg-zinc-800" value={formPrio[projectName] || "NO_URGENTE"} onChange={e => setFormPrio({ ...formPrio, [projectName]: e.target.value })}>
                             <option value="NO_URGENTE">Común</option><option value="URGENTE">URGENTE</option>
                           </select>
-                          <button onClick={() => handleCreateTask(cityGroup.city, projectName)} className="bg-white text-black font-bold text-xs px-5 py-3 rounded-lg">Ok</button>
+                          <button onClick={() => handleCreateTask(cityGroup.city, projectName)} className="bg-white text-black font-bold text-xs px-4 py-2 rounded-lg">Ok</button>
                         </div>
                       </div>
                     </div>
@@ -210,33 +210,37 @@ export default function MisTareas() {
           ))}
         </div>
 
-        {/* LA RUTA - MOBILE OPTIMIZED */}
-        <div className="mt-16 mb-20 p-5 md:p-8 rounded-3xl border-2 border-purple-500 bg-zinc-900/50">
-          <h2 className="text-2xl md:text-3xl font-extrabold text-purple-400 mb-6 flex items-center gap-2">🚀 LA RUTA</h2>
+        {/* LA RUTA - CON MICRÓFONO */}
+        <div className="mt-16 p-5 md:p-8 rounded-3xl border-2 border-purple-500 bg-zinc-900/50">
+          <h2 className="text-2xl font-extrabold text-purple-400 mb-6">🚀 LA RUTA</h2>
           <div className="flex flex-col gap-3 mb-8">
-            <input type="text" placeholder="Paso a la ruta..." className="p-4 rounded-xl border border-zinc-700 bg-zinc-800 text-white" value={rutaDesc} onChange={e => setRutaDesc(e.target.value)} />
+            <div className="relative">
+              <input type="text" placeholder={isListening ? "Escuchando..." : "Escribe o dicta..."} className={`p-4 pr-14 rounded-xl border w-full bg-zinc-800 text-white ${isListening ? "border-red-500" : "border-zinc-700"}`} value={rutaDesc} onChange={e => setRutaDesc(e.target.value)} />
+              <button onClick={startListening} className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg ${isListening ? "bg-red-600 text-white animate-pulse" : "bg-zinc-700 text-zinc-400"}`}>
+                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" /><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" /></svg>
+              </button>
+            </div>
             <div className="flex gap-3">
-              <select className="flex-1 p-3 rounded-xl border border-zinc-700 bg-zinc-800 text-white" value={rutaPrio} onChange={e => setRutaPrio(e.target.value as any)}>
+              <select className="flex-1 p-3 rounded-xl bg-zinc-800" value={rutaPrio} onChange={e => setRutaPrio(e.target.value as any)}>
                 <option value="NO_URGENTE">Estándar</option><option value="URGENTE">URGENTE</option>
               </select>
-              <button onClick={handleCreateRuta} className="bg-purple-600 text-white font-bold px-8 py-3 rounded-xl">Ir</button>
+              <button onClick={handleCreateRuta} className="bg-purple-600 text-white font-bold px-8 py-3 rounded-xl">Agregar</button>
             </div>
           </div>
           <div className="space-y-3">
             {rutaTasks.map(t => (
-              <div key={t.id} className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${t.status === 'completed' ? "bg-zinc-950 opacity-40" : t.priority === 'URGENTE' ? "bg-red-950/30 border-red-500" : "bg-zinc-900 border-zinc-800"}`}>
-                <div className="flex gap-4 items-center flex-1 min-w-0">
-                  <button onClick={() => handleCompleteRuta(t.id, t.status)} className={`w-7 h-7 rounded-full border shrink-0 flex items-center justify-center ${t.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500"}`}>
-                    {t.status === 'completed' && <span className="text-white">✓</span>}
+              <div key={t.id} className={`p-4 rounded-2xl border flex justify-between items-center ${t.status === 'completed' ? "bg-zinc-950 opacity-40" : t.priority === 'URGENTE' ? "bg-red-950/30 border-red-500 shadow-md" : "bg-zinc-900 border-zinc-800"}`}>
+                <div className="flex gap-4 items-center flex-1">
+                  <button onClick={() => handleCompleteRuta(t.id, t.status)} className={`w-7 h-7 rounded-full border flex items-center justify-center ${t.status === 'completed' ? "bg-green-600" : "border-zinc-500"}`}>
+                    {t.status === 'completed' && <span className="text-white text-xs">✓</span>}
                   </button>
-                  <p className={`text-base md:text-lg break-words ${t.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{t.description}</p>
+                  <p className={`text-base break-words ${t.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{t.description}</p>
                 </div>
-                <button onClick={() => handleDeleteRuta(t.id)} className="text-zinc-600 hover:text-red-500 ml-2"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                <button onClick={() => handleDeleteRuta(t.id)} className="text-zinc-600 hover:text-red-500"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
               </div>
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );
