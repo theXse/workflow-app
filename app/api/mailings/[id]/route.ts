@@ -3,16 +3,17 @@ import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export async function DELETE(
   _request: Request,
   { params }: { params: { id: string } }
 ) {
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!supabaseUrl || (!serviceRoleKey && !anonKey)) {
     return NextResponse.json(
       {
         error:
-          "Faltan variables de entorno para borrar mailings (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).",
+          "Faltan variables de entorno para borrar mailings (NEXT_PUBLIC_SUPABASE_URL y al menos una key: SUPABASE_SERVICE_ROLE_KEY o NEXT_PUBLIC_SUPABASE_ANON_KEY).",
       },
       { status: 500 }
     );
@@ -23,14 +24,14 @@ export async function DELETE(
     return NextResponse.json({ error: "ID de mailing inválido." }, { status: 400 });
   }
 
-  const admin = createClient(supabaseUrl, serviceRoleKey, {
+  const supabaseKey = serviceRoleKey || anonKey;
+  const db = createClient(supabaseUrl, supabaseKey!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data, error } = await admin
+  const { data, error } = await db
     .from("mailings_mensuales")
     .update({
-      objetivo_correo: "__soft_deleted__",
       estado_envio: "eliminado",
     })
     .eq("id", mailingId)

@@ -401,10 +401,7 @@ export default function MisTareas() {
     } catch (error) {
       const { error: fallbackError } = await supabase
         .from('mailings_mensuales')
-        .update({
-          objetivo_correo: MAILING_SOFT_DELETED_MARK,
-          estado_envio: 'eliminado',
-        })
+        .update({ estado_envio: 'eliminado' })
         .eq('id', mailingId);
 
       if (fallbackError) {
