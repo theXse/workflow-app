@@ -90,6 +90,7 @@ export default function MisTareas() {
   const [mailingProject, setMailingProject] = useState('');
   const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
+  const [saveNotice, setSaveNotice] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -133,7 +134,8 @@ export default function MisTareas() {
 
   const handleGuardarCambios = () => {
     setCurrentTime(Date.now());
-    alert("Cambios guardados. Nota: cada acción ya se guarda automáticamente en la base de datos.");
+    setSaveNotice("✅ Cambios guardados. Todo se persiste automáticamente en la base de datos.");
+    setTimeout(() => setSaveNotice(''), 3500);
   };
 
   // --- ACCIONES TAREAS ---
@@ -295,19 +297,24 @@ export default function MisTareas() {
         {/* ENCABEZADO Y BOTON LMPIEZA */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <h1 className="text-4xl font-extrabold tracking-tight">Mis Tareas Personales</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              onClick={handleGuardarCambios}
-              className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
-            >
-              💾 Guardar cambios
-            </button>
-            <button 
-              onClick={handleLimpiarMes}
-              className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
-            >
-              🗑 Limpiar Mes (Borrar Completadas)
-            </button>
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleGuardarCambios}
+                className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                💾 Guardar cambios
+              </button>
+              <button
+                type="button"
+                onClick={handleLimpiarMes}
+                className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                🗑 Limpiar Mes (Borrar Completadas)
+              </button>
+            </div>
+            {saveNotice && <p className="text-sm text-emerald-600 dark:text-emerald-400">{saveNotice}</p>}
           </div>
         </div>
         <p className="text-zinc-500 mb-8 text-lg">Organiza y prioriza tu flujo de trabajo de la agencia.</p>
