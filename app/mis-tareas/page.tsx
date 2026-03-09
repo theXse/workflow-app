@@ -69,6 +69,8 @@ const getStoredRutaPrio = () => {
   return value === 'URGENTE' ? 'URGENTE' : 'NO_URGENTE';
 };
 
+const MAILING_SOFT_DELETED_MARK = '__soft_deleted__';
+
 const AGENCY_STRUCTURE = [
   {
     city: "Osorno",
@@ -136,7 +138,7 @@ export default function MisTareas() {
       supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
       supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
       supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
-      supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
+      supabase.from("mailings_mensuales").select("*").neq("objetivo_correo", MAILING_SOFT_DELETED_MARK).order("mes_objetivo", { ascending: false })
     ]);
 
     if (tData) setTasks(tData as PersonalTask[]);
@@ -389,9 +391,16 @@ export default function MisTareas() {
       .eq("id", mailingId);
 
     if (error) {
-      setMailings(previous);
-      notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.');
-      return;
+      const { error: fallbackError } = await supabase
+        .from("mailings_mensuales")
+        .update({ objetivo_correo: MAILING_SOFT_DELETED_MARK })
+        .eq("id", mailingId);
+
+      if (fallbackError) {
+        setMailings(previous);
+        notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.');
+        return;
+      }
     }
 
     setMailings(previous.filter(m => m.id !== mailingId));
