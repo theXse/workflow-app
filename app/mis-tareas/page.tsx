@@ -69,6 +69,23 @@ const getStoredRutaPrio = () => {
   return value === 'URGENTE' ? 'URGENTE' : 'NO_URGENTE';
 };
 
+const getStoredDeletedMailingIds = () => {
+  if (typeof window === 'undefined') return [] as string[];
+  const value = window.localStorage.getItem('mis_tareas_deleted_mailings');
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as string[];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+const storeDeletedMailingIds = (ids: string[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem('mis_tareas_deleted_mailings', JSON.stringify(Array.from(new Set(ids))));
+};
+
 const MAILING_SOFT_DELETED_MARK = '__soft_deleted__';
 
 const AGENCY_STRUCTURE = [
@@ -111,6 +128,7 @@ export default function MisTareas() {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [campanas, setCampanas] = useState<Campana[]>([]);
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
+  const [deletedMailingIds, setDeletedMailingIds] = useState<string[]>(() => getStoredDeletedMailingIds());
   const [mailingProject, setMailingProject] = useState(() => getStoredString('mis_tareas_mailing_project'));
   const [mailingFechaEnvio, setMailingFechaEnvio] = useState(() => getStoredString('mis_tareas_mailing_fecha'));
   const [mailingObjetivo, setMailingObjetivo] = useState(() => getStoredString('mis_tareas_mailing_objetivo'));
@@ -153,11 +171,14 @@ export default function MisTareas() {
     if (cData) {
       setCampanas(cData as Campana[]);
     }
-    if (mData) setMailings(mData as MailingMensual[]);
+    if (mData) {
+      const filteredMailings = (mData as MailingMensual[]).filter(m => !deletedMailingIds.includes(m.id));
+      setMailings(filteredMailings);
+    }
 
     if (showLoader) setLoading(false);
     setCurrentTime(Date.now());
-  }, []);
+  }, [deletedMailingIds]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -390,7 +411,11 @@ export default function MisTareas() {
 
   const handleDeleteMailing = async (mailingId: string) => {
     const previous = mailings;
+    const nextDeletedIds = [...deletedMailingIds, mailingId];
+
     setMailings(previous.filter(m => m.id !== mailingId));
+    setDeletedMailingIds(nextDeletedIds);
+    storeDeletedMailingIds(nextDeletedIds);
 
     try {
       const response = await fetch(`/api/mailings/${mailingId}`, { method: 'DELETE' });
@@ -406,6 +431,9 @@ export default function MisTareas() {
 
       if (fallbackError) {
         setMailings(previous);
+        const restoredIds = deletedMailingIds.filter(id => id !== mailingId);
+        setDeletedMailingIds(restoredIds);
+        storeDeletedMailingIds(restoredIds);
         const detail = error instanceof Error ? error.message : 'Revisa variables de entorno y permisos en Supabase.';
         notifyPersistenceError('❌ No se pudo borrar el mailing.', detail);
       }
