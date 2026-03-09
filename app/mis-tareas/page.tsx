@@ -383,13 +383,13 @@ export default function MisTareas() {
   const handleDeleteMailing = async (mailingId: string) => {
     const previous = mailings;
 
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("mailings_mensuales")
       .delete()
-      .eq("id", mailingId)
-      .select("id");
+      .eq("id", mailingId);
 
-    if (error || !data || data.length === 0) {
+    if (error) {
+      setMailings(previous);
       notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.');
       return;
     }
