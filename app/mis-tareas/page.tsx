@@ -384,8 +384,9 @@ export default function MisTareas() {
                     </button>
                     <button
                       onClick={() => handleDeleteMailing(m.id)}
-                      className="text-xs font-bold px-3 py-2 rounded-lg bg-red-100 text-red-800 hover:bg-red-200"
+                      className="text-xs font-bold px-3 py-2 rounded-lg border border-red-200 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-900/50 dark:bg-red-900/30 dark:text-red-300"
                       title="Eliminar mailing"
+                      aria-label="Borrar mailing"
                     >
                       🗑 Borrar
                     </button>
