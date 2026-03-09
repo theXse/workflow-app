@@ -385,30 +385,19 @@ export default function MisTareas() {
 
   const handleDeleteMailing = async (mailingId: string) => {
     const previous = mailings;
-
-    const { error } = await supabase
-      .from("mailings_mensuales")
-      .delete()
-      .eq("id", mailingId);
-
-    if (error) {
-      const { error: fallbackError } = await supabase
-        .from("mailings_mensuales")
-        .update({ objetivo_correo: MAILING_SOFT_DELETED_MARK })
-        .eq("id", mailingId);
-
-      if (fallbackError) {
-        setMailings(previous);
-        const detail = fallbackError.message || error.message || 'Revisa políticas RLS de DELETE/UPDATE en mailings_mensuales';
-        console.error('Mailing delete failed', { deleteError: error, fallbackError, mailingId });
-        notifyPersistenceError('❌ No se pudo borrar el mailing en base de datos.', detail);
-        return;
-      }
-
-      console.warn('DELETE bloqueado; aplicado soft-delete para mailing', { mailingId, deleteError: error.message });
-    }
-
     setMailings(previous.filter(m => m.id !== mailingId));
+
+    try {
+      const response = await fetch(`/api/mailings/${mailingId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || 'No se pudo borrar el mailing en servidor.');
+      }
+    } catch (error) {
+      setMailings(previous);
+      const detail = error instanceof Error ? error.message : 'Revisa variables de entorno y permisos en Supabase.';
+      notifyPersistenceError('❌ No se pudo borrar el mailing.', detail);
+    }
   };
 
   // --- ALERTA VISUAL 48 HRS ---
