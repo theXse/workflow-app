@@ -88,7 +88,7 @@ export default function MisTareas() {
   const [campanas, setCampanas] = useState<Campana[]>([]);
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
   const [mailingProject, setMailingProject] = useState('');
-  const [mailingMes, setMailingMes] = useState('');
+  const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
 
   useEffect(() => {
@@ -228,7 +228,7 @@ export default function MisTareas() {
   // --- MAILINGS MENSUALES ---
   const handleCreateMailing = async () => {
     const selectedProject = mailingProject || campanas[0]?.nombre;
-    if (!selectedProject || !mailingMes || !mailingObjetivo.trim()) return;
+    if (!selectedProject || !mailingFechaEnvio || !mailingObjetivo.trim()) return;
 
     const selectedCampana = campanas.find(c => c.nombre === selectedProject);
     if (!selectedCampana) return;
@@ -237,7 +237,7 @@ export default function MisTareas() {
       .from("mailings_mensuales")
       .insert({
         id_campana: selectedCampana.id,
-        mes_objetivo: mailingMes,
+        mes_objetivo: mailingFechaEnvio,
         objetivo_correo: mailingObjetivo,
         estado_envio: 'pendiente'
       })
@@ -246,7 +246,7 @@ export default function MisTareas() {
 
     if (data) {
       setMailings([data as MailingMensual, ...mailings]);
-      setMailingMes('');
+      setMailingFechaEnvio('');
       setMailingObjetivo('');
     }
   };
@@ -317,7 +317,7 @@ export default function MisTareas() {
         {/* Mailings Mensuales */}
         <div className="mb-14 bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-2xl font-bold mb-4">📧 Mailings Mensuales</h2>
-          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y marca si ya fue enviado.</p>
+          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y define el día y mes en que debe enviarse.</p>
 
           <div className="grid md:grid-cols-[220px_180px_1fr_auto] gap-3 mb-5">
             <select
@@ -332,10 +332,14 @@ export default function MisTareas() {
             </select>
 
             <input
-              type="month"
+              type="text"
+              placeholder="DD/MM"
               className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
-              value={mailingMes}
-              onChange={e => setMailingMes(e.target.value)}
+              value={mailingFechaEnvio}
+              onChange={e => {
+                const cleanValue = e.target.value.replace(/[^\d/]/g, '');
+                if (cleanValue.length <= 5) setMailingFechaEnvio(cleanValue);
+              }}
             />
 
             <input
