@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type PersonalTask = {
@@ -44,8 +44,49 @@ type MailingMensual = {
   id_campana: string;
   mes_objetivo: string;
   objetivo_correo: string;
-  estado_envio: 'pendiente' | 'enviado';
+  estado_envio: 'pendiente' | 'enviado' | 'eliminado';
 };
+
+const getStoredString = (key: string) => {
+  if (typeof window === 'undefined') return '';
+  return window.localStorage.getItem(key) || '';
+};
+
+const getStoredRecord = (key: string): Record<string, string> => {
+  if (typeof window === 'undefined') return {};
+  const value = window.localStorage.getItem(key);
+  if (!value) return {};
+  try {
+    return JSON.parse(value) as Record<string, string>;
+  } catch {
+    return {};
+  }
+};
+
+const getStoredRutaPrio = () => {
+  if (typeof window === 'undefined') return 'NO_URGENTE' as const;
+  const value = window.localStorage.getItem('mis_tareas_ruta_prio');
+  return value === 'URGENTE' ? 'URGENTE' : 'NO_URGENTE';
+};
+
+const getStoredDeletedMailingIds = () => {
+  if (typeof window === 'undefined') return [] as string[];
+  const value = window.localStorage.getItem('mis_tareas_deleted_mailings');
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as string[];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+const storeDeletedMailingIds = (ids: string[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem('mis_tareas_deleted_mailings', JSON.stringify(Array.from(new Set(ids))));
+};
+
+const MAILING_SOFT_DELETED_MARK = '__soft_deleted__';
 
 const AGENCY_STRUCTURE = [
   {
@@ -72,60 +113,129 @@ export default function MisTareas() {
   const [loading, setLoading] = useState(true);
 
   // Formularios Proyectos
-  const [formDesc, setFormDesc] = useState<Record<string, string>>({});
-  const [formPrio, setFormPrio] = useState<Record<string, string>>({});
+  const [formDesc, setFormDesc] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_desc'));
+  const [formPrio, setFormPrio] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_prio'));
   
   // Nuevos Focos Dinámicos Modulares
   const [focuses, setFocuses] = useState<ProjectFocus[]>([]);
-  const [formFocus, setFormFocus] = useState<Record<string, string>>({});
+  const [formFocus, setFormFocus] = useState<Record<string, string>>(() => getStoredRecord('mis_tareas_form_focus'));
 
   // Sección La Ruta
   const [rutaTasks, setRutaTasks] = useState<RutaTask[]>([]);
-  const [rutaFormDesc, setRutaFormDesc] = useState("");
-  const [rutaFormPrio, setRutaFormPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
+  const [rutaFormDesc, setRutaFormDesc] = useState(() => getStoredString('mis_tareas_ruta_desc'));
+  const [rutaFormPrio, setRutaFormPrio] = useState<'URGENTE' | 'NO_URGENTE'>(() => getStoredRutaPrio());
 
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [campanas, setCampanas] = useState<Campana[]>([]);
   const [mailings, setMailings] = useState<MailingMensual[]>([]);
-  const [mailingProject, setMailingProject] = useState('');
-  const [mailingMes, setMailingMes] = useState('');
-  const [mailingObjetivo, setMailingObjetivo] = useState('');
+  const [deletedMailingIds, setDeletedMailingIds] = useState<string[]>(() => getStoredDeletedMailingIds());
+  const [mailingProject, setMailingProject] = useState(() => getStoredString('mis_tareas_mailing_project'));
+  const [mailingFechaEnvio, setMailingFechaEnvio] = useState(() => getStoredString('mis_tareas_mailing_fecha'));
+  const [mailingObjetivo, setMailingObjetivo] = useState(() => getStoredString('mis_tareas_mailing_objetivo'));
+  const [saveNotice, setSaveNotice] = useState('');
+  const [saveNoticeType, setSaveNoticeType] = useState<'success' | 'error'>('success');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('mis_tareas_last_saved_at') || '';
+  });
+
+  const fetchData = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
+
+    const [
+      { data: tData },
+      { data: pData },
+      { data: fData },
+      { data: rData },
+      { data: cData },
+      { data: mData }
+    ] = await Promise.all([
+      supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("project_status").select("*").order("project_name", { ascending: true }),
+      supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
+      supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
+      supabase
+        .from("mailings_mensuales")
+        .select("*")
+        .neq("objetivo_correo", MAILING_SOFT_DELETED_MARK)
+        .neq("estado_envio", "eliminado")
+        .order("mes_objetivo", { ascending: false })
+    ]);
+
+    if (tData) setTasks(tData as PersonalTask[]);
+    if (pData) setProjectStatuses(pData as ProjectStatus[]);
+    if (fData) setFocuses(fData as ProjectFocus[]);
+    if (rData) setRutaTasks(rData as RutaTask[]);
+    if (cData) {
+      setCampanas(cData as Campana[]);
+    }
+    if (mData) {
+      const filteredMailings = (mData as MailingMensual[]).filter(m => !deletedMailingIds.includes(m.id));
+      setMailings(filteredMailings);
+    }
+
+    if (showLoader) setLoading(false);
+    setCurrentTime(Date.now());
+  }, [deletedMailingIds]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+    const timer = setTimeout(() => {
+      void fetchData();
+    }, 0);
 
-      const [
-        { data: tData },
-        { data: pData },
-        { data: fData },
-        { data: rData },
-        { data: cData },
-        { data: mData }
-      ] = await Promise.all([
-        supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("project_status").select("*").order("project_name", { ascending: true }),
-        supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
-        supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
-        supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
-      ]);
-      
-      if (tData) setTasks(tData as PersonalTask[]);
-      if (pData) setProjectStatuses(pData as ProjectStatus[]);
-      if (fData) setFocuses(fData as ProjectFocus[]);
-      if (rData) setRutaTasks(rData as RutaTask[]);
-      if (cData) {
-        setCampanas(cData as Campana[]);
+    return () => clearTimeout(timer);
+  }, [fetchData]);
+
+
+  const handleGuardarCambios = async () => {
+    setIsSaving(true);
+
+    window.localStorage.setItem('mis_tareas_form_desc', JSON.stringify(formDesc));
+    window.localStorage.setItem('mis_tareas_form_prio', JSON.stringify(formPrio));
+    window.localStorage.setItem('mis_tareas_form_focus', JSON.stringify(formFocus));
+    window.localStorage.setItem('mis_tareas_ruta_desc', rutaFormDesc);
+    window.localStorage.setItem('mis_tareas_ruta_prio', rutaFormPrio);
+    window.localStorage.setItem('mis_tareas_mailing_project', mailingProject);
+    window.localStorage.setItem('mis_tareas_mailing_fecha', mailingFechaEnvio);
+    window.localStorage.setItem('mis_tareas_mailing_objetivo', mailingObjetivo);
+
+    try {
+      const hasMailingDraft = Boolean(mailingProject || mailingFechaEnvio || mailingObjetivo.trim());
+      const mailingDraftIsComplete = Boolean((mailingProject || campanas[0]?.nombre) && mailingFechaEnvio && mailingObjetivo.trim());
+
+      if (hasMailingDraft && !mailingDraftIsComplete) {
+        setSaveNoticeType('error');
+        setSaveNotice('⚠️ Borrador guardado localmente. Para enviarlo a base de datos, completa proyecto, fecha DD/MM y objetivo.');
+        return;
       }
-      if (mData) setMailings(mData as MailingMensual[]);
-      
-      setLoading(false);
-      setCurrentTime(Date.now());
-    };
 
-    fetchData();
-  }, []);
+      if (mailingDraftIsComplete) {
+        await handleCreateMailing();
+      }
+
+      const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      setCurrentTime(Date.now());
+      setLastSavedAt(now);
+      window.localStorage.setItem('mis_tareas_last_saved_at', now);
+      setSaveNoticeType('success');
+      setSaveNotice('✅ Cambios guardados. (Borradores locales + datos enviados)');
+    } catch {
+      setSaveNoticeType('error');
+      setSaveNotice('❌ No se pudo guardar. Revisa conexión/permisos y vuelve a intentar.');
+    } finally {
+      setIsSaving(false);
+      setTimeout(() => setSaveNotice(''), 4000);
+    }
+  };
+
+  const notifyPersistenceError = (message: string, detail?: string) => {
+    const fullMessage = detail ? `${message} (${detail})` : message;
+    setSaveNoticeType('error');
+    setSaveNotice(fullMessage);
+    setTimeout(() => setSaveNotice(''), 6500);
+  };
 
   // --- ACCIONES TAREAS ---
   const handleCreateTask = async (city: string, project: string) => {
@@ -146,16 +256,23 @@ export default function MisTareas() {
   };
 
   const handleCompleteTask = async (id: string) => {
-    // UI Update inmediata
+    const previousTasks = tasks;
     setTasks(tasks.map(t => t.id === id ? { ...t, status: 'completed' } : t));
-    await supabase.from("personal_tasks").update({ status: 'completed' }).eq("id", id);
+    const { error } = await supabase.from("personal_tasks").update({ status: 'completed' }).eq("id", id);
+    if (error) {
+      setTasks(previousTasks);
+      notifyPersistenceError('❌ No se pudo guardar la tarea completada.');
+    }
   };
 
   const handleDeleteTask = async (id: string) => {
-    // UI Update intantánea
+    const previousTasks = tasks;
     setTasks(tasks.filter(t => t.id !== id));
-    // DB Update
-    await supabase.from("personal_tasks").delete().eq("id", id);
+    const { error } = await supabase.from("personal_tasks").delete().eq("id", id);
+    if (error) {
+      setTasks(previousTasks);
+      notifyPersistenceError('❌ No se pudo borrar la tarea.');
+    }
   };
 
   const handleLimpiarMes = async () => {
@@ -171,13 +288,17 @@ export default function MisTareas() {
   // --- ACCIONES TABLA CONTROL Y FOCO ---
   const toggleProjectStatus = async (ps: ProjectStatus) => {
     const newStatus = ps.status === 'OK' ? 'ATENCION' : 'OK';
-    
-    // UI Update optimista
+    const previous = projectStatuses;
+
     setProjectStatuses(projectStatuses.map(p => 
       p.id === ps.id ? { ...p, status: newStatus } : p
     ));
 
-    await supabase.from("project_status").update({ status: newStatus }).eq("id", ps.id);
+    const { error } = await supabase.from("project_status").update({ status: newStatus }).eq("id", ps.id);
+    if (error) {
+      setProjectStatuses(previous);
+      notifyPersistenceError('❌ No se pudo guardar el estado del proyecto.');
+    }
   };
 
   const saveFoco = async (project_name: string) => {
@@ -216,52 +337,106 @@ export default function MisTareas() {
   };
 
   const handleCompleteRutaTask = async (id: string) => {
+    const previous = rutaTasks;
     setRutaTasks(rutaTasks.map(t => t.id === id ? { ...t, status: 'completed' } : t));
-    await supabase.from("la_ruta_tasks").update({ status: 'completed' }).eq("id", id);
+    const { error } = await supabase.from("la_ruta_tasks").update({ status: 'completed' }).eq("id", id);
+    if (error) {
+      setRutaTasks(previous);
+      notifyPersistenceError('❌ No se pudo guardar la tarea de Ruta.');
+    }
   };
 
   const handleDeleteRutaTask = async (id: string) => {
+    const previous = rutaTasks;
     setRutaTasks(rutaTasks.filter(t => t.id !== id));
-    await supabase.from("la_ruta_tasks").delete().eq("id", id);
+    const { error } = await supabase.from("la_ruta_tasks").delete().eq("id", id);
+    if (error) {
+      setRutaTasks(previous);
+      notifyPersistenceError('❌ No se pudo borrar la tarea de Ruta.');
+    }
   };
 
   // --- MAILINGS MENSUALES ---
   const handleCreateMailing = async () => {
     const selectedProject = mailingProject || campanas[0]?.nombre;
-    if (!selectedProject || !mailingMes || !mailingObjetivo.trim()) return;
+    if (!selectedProject || !mailingFechaEnvio || !mailingObjetivo.trim()) {
+      throw new Error('Mailing incompleto');
+    }
 
     const selectedCampana = campanas.find(c => c.nombre === selectedProject);
-    if (!selectedCampana) return;
+    if (!selectedCampana) {
+      throw new Error('Campaña no encontrada');
+    }
 
     const { data } = await supabase
       .from("mailings_mensuales")
       .insert({
         id_campana: selectedCampana.id,
-        mes_objetivo: mailingMes,
+        mes_objetivo: mailingFechaEnvio,
         objetivo_correo: mailingObjetivo,
         estado_envio: 'pendiente'
       })
       .select()
       .single();
 
-    if (data) {
-      setMailings([data as MailingMensual, ...mailings]);
-      setMailingMes('');
-      setMailingObjetivo('');
+    if (!data) {
+      throw new Error('No se pudo guardar mailing');
     }
+
+    setMailings([data as MailingMensual, ...mailings]);
+    setMailingFechaEnvio('');
+    setMailingObjetivo('');
   };
 
   const toggleMailingStatus = async (mailing: MailingMensual) => {
+    const previous = mailings;
     const nextStatus = mailing.estado_envio === 'pendiente' ? 'enviado' : 'pendiente';
-    const { data } = await supabase
+    setMailings(mailings.map(m => (m.id === mailing.id ? { ...m, estado_envio: nextStatus } : m)));
+
+    const { data, error } = await supabase
       .from("mailings_mensuales")
       .update({ estado_envio: nextStatus })
       .eq("id", mailing.id)
       .select()
       .single();
 
-    if (data) {
-      setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
+    if (error || !data) {
+      setMailings(previous);
+      notifyPersistenceError('❌ No se pudo actualizar el estado del mailing.');
+      return;
+    }
+
+    setMailings(mailings.map(m => (m.id === mailing.id ? data as MailingMensual : m)));
+  };
+
+  const handleDeleteMailing = async (mailingId: string) => {
+    const previous = mailings;
+    const nextDeletedIds = [...deletedMailingIds, mailingId];
+
+    setMailings(previous.filter(m => m.id !== mailingId));
+    setDeletedMailingIds(nextDeletedIds);
+    storeDeletedMailingIds(nextDeletedIds);
+
+    try {
+      const response = await fetch(`/api/mailings/${mailingId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || 'No se pudo borrar el mailing en servidor.');
+      }
+    } catch (error) {
+      const { error: fallbackError } = await supabase
+        .from('mailings_mensuales')
+        .update({ estado_envio: 'eliminado' })
+        .eq('id', mailingId);
+
+      if (fallbackError) {
+        setMailings(previous);
+        const restoredIds = deletedMailingIds.filter(id => id !== mailingId);
+        setDeletedMailingIds(restoredIds);
+        storeDeletedMailingIds(restoredIds);
+        const detail = error instanceof Error ? error.message : 'Revisa variables de entorno y permisos en Supabase.';
+        notifyPersistenceError('❌ No se pudo borrar el mailing.', detail);
+      }
     }
   };
 
@@ -281,12 +456,27 @@ export default function MisTareas() {
         {/* ENCABEZADO Y BOTON LMPIEZA */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <h1 className="text-4xl font-extrabold tracking-tight">Mis Tareas Personales</h1>
-          <button 
-            onClick={handleLimpiarMes}
-            className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
-          >
-            🗑 Limpiar Mes (Borrar Completadas)
-          </button>
+          <div className="flex flex-col items-start md:items-end gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleGuardarCambios()}
+                disabled={isSaving}
+                className="shrink-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                {isSaving ? 'Guardando...' : '💾 Guardar cambios'}
+              </button>
+              <button
+                type="button"
+                onClick={handleLimpiarMes}
+                className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+              >
+                🗑 Limpiar Mes (Borrar Completadas)
+              </button>
+            </div>
+            {saveNotice && <p className={`text-sm ${saveNoticeType === 'success' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{saveNotice}</p>}
+            {lastSavedAt && <p className="text-xs text-zinc-500">Último guardado: {lastSavedAt}</p>}
+          </div>
         </div>
         <p className="text-zinc-500 mb-8 text-lg">Organiza y prioriza tu flujo de trabajo de la agencia.</p>
 
@@ -317,7 +507,7 @@ export default function MisTareas() {
         {/* Mailings Mensuales */}
         <div className="mb-14 bg-white dark:bg-zinc-900 rounded-2xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
           <h2 className="text-2xl font-bold mb-4">📧 Mailings Mensuales</h2>
-          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y marca si ya fue enviado.</p>
+          <p className="text-zinc-500 mb-5">Planifica desde aquí qué se envía por proyecto y define el día y mes en que debe enviarse.</p>
 
           <div className="grid md:grid-cols-[220px_180px_1fr_auto] gap-3 mb-5">
             <select
@@ -332,10 +522,14 @@ export default function MisTareas() {
             </select>
 
             <input
-              type="month"
+              type="text"
+              placeholder="DD/MM"
               className="p-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-950"
-              value={mailingMes}
-              onChange={e => setMailingMes(e.target.value)}
+              value={mailingFechaEnvio}
+              onChange={e => {
+                const cleanValue = e.target.value.replace(/[^\d/]/g, '');
+                if (cleanValue.length <= 5) setMailingFechaEnvio(cleanValue);
+              }}
             />
 
             <input
@@ -366,12 +560,22 @@ export default function MisTareas() {
                     <p className="text-sm text-zinc-600 dark:text-zinc-300 whitespace-pre-wrap">{m.objetivo_correo}</p>
                   </div>
 
-                  <button
-                    onClick={() => toggleMailingStatus(m)}
-                    className={`shrink-0 text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
-                  >
-                    {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0"> 
+                    <button
+                      onClick={() => toggleMailingStatus(m)}
+                      className={`text-xs font-bold px-3 py-2 rounded-lg ${m.estado_envio === 'enviado' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+                    >
+                      {m.estado_envio === 'enviado' ? 'ENVIADO ✅' : 'PENDIENTE ⏳'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMailing(m.id)}
+                      className="text-xs font-bold px-3 py-2 rounded-lg border border-red-200 bg-red-100 text-red-800 hover:bg-red-200 dark:border-red-900/50 dark:bg-red-900/30 dark:text-red-300"
+                      title="Eliminar mailing"
+                      aria-label="Borrar mailing"
+                    >
+                      🗑 Borrar
+                    </button>
+                  </div>
                 </div>
               );
             })}
