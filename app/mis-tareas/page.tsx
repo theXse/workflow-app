@@ -91,6 +91,10 @@ export default function MisTareas() {
   const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
   const [saveNotice, setSaveNotice] = useState('');
+  const [lastSavedAt, setLastSavedAt] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem('mis_tareas_last_saved_at') || '';
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -132,8 +136,12 @@ export default function MisTareas() {
     return () => clearTimeout(timer);
   }, [fetchData]);
 
+
   const handleGuardarCambios = () => {
+    const now = new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
     setCurrentTime(Date.now());
+    setLastSavedAt(now);
+    window.localStorage.setItem('mis_tareas_last_saved_at', now);
     setSaveNotice("✅ Cambios guardados. Todo se persiste automáticamente en la base de datos.");
     setTimeout(() => setSaveNotice(''), 3500);
   };
@@ -315,6 +323,7 @@ export default function MisTareas() {
               </button>
             </div>
             {saveNotice && <p className="text-sm text-emerald-600 dark:text-emerald-400">{saveNotice}</p>}
+            {lastSavedAt && <p className="text-xs text-zinc-500">Último guardado: {lastSavedAt}</p>}
           </div>
         </div>
         <p className="text-zinc-500 mb-8 text-lg">Organiza y prioriza tu flujo de trabajo de la agencia.</p>
