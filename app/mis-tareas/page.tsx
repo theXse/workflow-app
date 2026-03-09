@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 type PersonalTask = {
@@ -91,41 +91,50 @@ export default function MisTareas() {
   const [mailingFechaEnvio, setMailingFechaEnvio] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
 
-      const [
-        { data: tData },
-        { data: pData },
-        { data: fData },
-        { data: rData },
-        { data: cData },
-        { data: mData }
-      ] = await Promise.all([
-        supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("project_status").select("*").order("project_name", { ascending: true }),
-        supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
-        supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
-        supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
-        supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
-      ]);
-      
-      if (tData) setTasks(tData as PersonalTask[]);
-      if (pData) setProjectStatuses(pData as ProjectStatus[]);
-      if (fData) setFocuses(fData as ProjectFocus[]);
-      if (rData) setRutaTasks(rData as RutaTask[]);
-      if (cData) {
-        setCampanas(cData as Campana[]);
-      }
-      if (mData) setMailings(mData as MailingMensual[]);
-      
-      setLoading(false);
-      setCurrentTime(Date.now());
-    };
+    const [
+      { data: tData },
+      { data: pData },
+      { data: fData },
+      { data: rData },
+      { data: cData },
+      { data: mData }
+    ] = await Promise.all([
+      supabase.from("personal_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("project_status").select("*").order("project_name", { ascending: true }),
+      supabase.from("project_focus").select("*").order("created_at", { ascending: true }),
+      supabase.from("la_ruta_tasks").select("*").order("created_at", { ascending: true }),
+      supabase.from("campanas").select("id,nombre").order("nombre", { ascending: true }),
+      supabase.from("mailings_mensuales").select("*").order("mes_objetivo", { ascending: false })
+    ]);
 
-    fetchData();
+    if (tData) setTasks(tData as PersonalTask[]);
+    if (pData) setProjectStatuses(pData as ProjectStatus[]);
+    if (fData) setFocuses(fData as ProjectFocus[]);
+    if (rData) setRutaTasks(rData as RutaTask[]);
+    if (cData) {
+      setCampanas(cData as Campana[]);
+    }
+    if (mData) setMailings(mData as MailingMensual[]);
+
+    setLoading(false);
+    setCurrentTime(Date.now());
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [fetchData]);
+
+  const handleGuardarCambios = async () => {
+    await fetchData();
+    alert("Cambios sincronizados. Tus acciones se guardan automáticamente en la base de datos.");
+  };
 
   // --- ACCIONES TAREAS ---
   const handleCreateTask = async (city: string, project: string) => {
@@ -286,12 +295,20 @@ export default function MisTareas() {
         {/* ENCABEZADO Y BOTON LMPIEZA */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
           <h1 className="text-4xl font-extrabold tracking-tight">Mis Tareas Personales</h1>
-          <button 
-            onClick={handleLimpiarMes}
-            className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
-          >
-            🗑 Limpiar Mes (Borrar Completadas)
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleGuardarCambios}
+              className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+            >
+              💾 Guardar cambios
+            </button>
+            <button 
+              onClick={handleLimpiarMes}
+              className="shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-sm"
+            >
+              🗑 Limpiar Mes (Borrar Completadas)
+            </button>
+          </div>
         </div>
         <p className="text-zinc-500 mb-8 text-lg">Organiza y prioriza tu flujo de trabajo de la agencia.</p>
 
