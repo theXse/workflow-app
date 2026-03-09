@@ -131,9 +131,9 @@ export default function MisTareas() {
     return () => clearTimeout(timer);
   }, [fetchData]);
 
-  const handleGuardarCambios = async () => {
-    await fetchData();
-    alert("Cambios sincronizados. Tus acciones se guardan automáticamente en la base de datos.");
+  const handleGuardarCambios = () => {
+    setCurrentTime(Date.now());
+    alert("Cambios guardados. Nota: cada acción ya se guarda automáticamente en la base de datos.");
   };
 
   // --- ACCIONES TAREAS ---
