@@ -86,8 +86,8 @@ export default function AprobacionesPage() {
                 <div className="space-y-8">
                     {contenidos.map(item => (
                         <div key={item.id} className={`rounded-3xl border-2 transition-all p-5 md:p-8 relative ${item.etapa === 'aprobado' ? "border-green-500 bg-green-500/5" :
-                                item.etapa === 'cliente' ? "border-blue-500 bg-blue-500/5 shadow-[0_0_20px_rgba(59,130,246,0.1)]" :
-                                    item.etapa === 'diseno' ? "border-amber-500 bg-amber-500/5" : "border-zinc-800 bg-zinc-900"
+                            item.etapa === 'cliente' ? "border-blue-500 bg-blue-500/5 shadow-[0_0_20px_rgba(59,130,246,0.1)]" :
+                                item.etapa === 'diseno' ? "border-amber-500 bg-amber-500/5" : "border-zinc-800 bg-zinc-900"
                             }`}>
                             <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-8">
                                 <div>
@@ -99,8 +99,8 @@ export default function AprobacionesPage() {
                                         value={item.etapa}
                                         onChange={(e) => actualizarCampo(item.id, 'etapa', e.target.value)}
                                         className={`flex-1 md:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none outline-none cursor-pointer shadow-md ${item.etapa === 'aprobado' ? "bg-green-500 text-black" :
-                                                item.etapa === 'cliente' ? "bg-blue-500 text-white" :
-                                                    item.etapa === 'diseno' ? "bg-amber-500 text-black" : "bg-zinc-700 text-zinc-300"
+                                            item.etapa === 'cliente' ? "bg-blue-500 text-white" :
+                                                item.etapa === 'diseno' ? "bg-amber-500 text-black" : "bg-zinc-700 text-zinc-300"
                                             }`}
                                     >
                                         <option value="textos">✍️ FASE 1: TEXTOS</option>
