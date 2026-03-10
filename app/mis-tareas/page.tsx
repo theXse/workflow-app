@@ -64,13 +64,21 @@ export default function MisTareas() {
     fetchData();
   }, []);
 
+  // FUNCIÓN CRÍTICA: Ahora sí guarda en Supabase
   const updateMailingStatus = async (id: string, nuevoEstado: MailingMensual['estado_envio']) => {
-    // 1. Actualizar visualmente de inmediato
+    // 1. Update UI
     setMailings(prev => prev.map(m => m.id === id ? { ...m, estado_envio: nuevoEstado } : m));
 
-    // 2. Guardar en Supabase
-    const { error } = await supabase.from("mailings_mensuales").update({ estado_envio: nuevoEstado }).eq("id", id);
-    if (error) console.error("Error al guardar estado:", error);
+    // 2. Update DB
+    const { error } = await supabase
+      .from("mailings_mensuales")
+      .update({ estado_envio: nuevoEstado })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Error al guardar estado:", error);
+      alert("Error al sincronizar con la base de datos");
+    }
   };
 
   const handleCreateMailing = async () => {
@@ -183,9 +191,9 @@ export default function MisTareas() {
                     <select
                       value={m.estado_envio}
                       onChange={(e) => updateMailingStatus(m.id, e.target.value as any)}
-                      className={`flex-1 sm:flex-none text-[10px] font-bold px-4 py-2 rounded-full border-none cursor-pointer z-10 ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
-                          m.estado_envio === 'enviado' ? 'bg-green-900 text-green-400' :
-                            'bg-zinc-800 text-zinc-400'
+                      className={`flex-1 sm:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none cursor-pointer ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
+                          m.estado_envio === 'enviado' ? 'bg-zinc-800 text-zinc-500' :
+                            'bg-zinc-700 text-white'
                         }`}
                     >
                       <option value="pendiente">PENDIENTE</option>
