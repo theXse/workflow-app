@@ -64,20 +64,23 @@ export default function MisTareas() {
     fetchData();
   }, []);
 
-  // FUNCIÓN CORREGIDA: Sincronización real con Supabase
+  // FUNCIÓN DETECTIVE: Nos dirá exactamente qué falla
   const updateMailingStatus = async (id: string, nuevoEstado: MailingMensual['estado_envio']) => {
-    // 1. Actualización visual rápida
+    // 1. Cambio visual rápido
     setMailings(prev => prev.map(m => m.id === id ? { ...m, estado_envio: nuevoEstado } : m));
 
-    // 2. Persistencia en base de datos
-    const { error } = await supabase
+    // 2. Intento de guardado con reporte detallado
+    const { data, error } = await supabase
       .from("mailings_mensuales")
       .update({ estado_envio: nuevoEstado })
-      .eq("id", id);
+      .eq("id", id)
+      .select();
 
     if (error) {
-      console.error("Error al guardar estado:", error);
-      alert("No se pudo guardar el cambio en la base de datos.");
+      console.error("ERROR SUPABASE:", error);
+      alert(`DETALLE DEL ERROR:\n\nMensaje: ${error.message}\nCódigo: ${error.code}\nHint: ${error.hint || 'Sin pistas'}`);
+    } else if (data && data.length === 0) {
+      alert("Error: Supabase no encontró la fila con ese ID. Intenta crear un mailing nuevo y cambiarle el estado a ese.");
     }
   };
 
@@ -164,7 +167,7 @@ export default function MisTareas() {
               <input type="text" placeholder="DD/MM" className="p-3 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700" value={mailingMes} onChange={e => setMailingMes(e.target.value)} />
             </div>
             <input type="text" placeholder="Objetivo..." className="p-3 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700" value={mailingObjetivo} onChange={e => setMailingObjetivo(e.target.value)} />
-            <button onClick={handleCreateMailing} className="bg-white text-black font-bold p-3 rounded-lg">Guardar</button>
+            <button onClick={handleCreateMailing} className="bg-white text-black font-bold p-3 rounded-lg hover:bg-zinc-200 transition-all">Guardar</button>
           </div>
           <div className="space-y-3">
             {mailings.map(m => {
@@ -191,16 +194,16 @@ export default function MisTareas() {
                     <select
                       value={m.estado_envio}
                       onChange={(e) => updateMailingStatus(m.id, e.target.value as any)}
-                      className={`flex-1 sm:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none cursor-pointer transition-colors ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
-                          m.estado_envio === 'enviado' ? 'bg-zinc-800 text-zinc-500' :
-                            'bg-zinc-700 text-white hover:bg-zinc-600'
+                      className={`flex-1 sm:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none cursor-pointer transition-all ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
+                        m.estado_envio === 'enviado' ? 'bg-zinc-800 text-zinc-500' :
+                          'bg-zinc-700 text-white'
                         }`}
                     >
                       <option value="pendiente">PENDIENTE</option>
                       <option value="en_revision">EN REVISIÓN</option>
                       <option value="enviado">ENVIADO</option>
                     </select>
-                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
+                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                   </div>
                 </div>
               );
@@ -218,15 +221,12 @@ export default function MisTareas() {
                   const projectTasks = tasks.filter(t => t.project === projectName);
                   return (
                     <div key={projectName} className="bg-zinc-900 rounded-2xl border border-zinc-800 flex flex-col h-[350px]">
-                      <div className="p-4 bg-zinc-950/50 flex justify-between items-center">
-                        <h3 className="font-bold text-sm">{projectName}</h3>
-                        <span className="text-[9px] bg-zinc-800 px-2 py-1 rounded text-zinc-500">{projectTasks.length}</span>
-                      </div>
+                      <div className="p-4 bg-zinc-950/50"><h3 className="font-bold text-sm">{projectName}</h3></div>
                       <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-zinc-950/20">
                         {projectTasks.map(task => (
-                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 ${task.status === 'completed' ? "bg-zinc-900 opacity-40 shadow-none border-zinc-800" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2 shadow-[0_0_10px_rgba(239,68,68,0.1)]" : "bg-zinc-800 border-zinc-700"}`}>
+                          <div key={task.id} className={`p-3 rounded-xl border flex justify-between items-start gap-2 ${task.status === 'completed' ? "bg-zinc-900 opacity-40 shadow-none border-zinc-800" : task.priority === 'URGENTE' ? "bg-red-950/40 border-red-500 border-2" : "bg-zinc-800 border-zinc-700"}`}>
                             <div className="flex gap-3 min-w-0 flex-1">
-                              <button onClick={() => handleCompleteTask(task.id, task.status)} className={`mt-0.5 w-6 h-6 rounded-full border shrink-0 flex items-center justify-center transition-all ${task.status === 'completed' ? "bg-green-600 border-green-600 shadow-inner" : "border-zinc-500 hover:border-white"}`}>
+                              <button onClick={() => handleCompleteTask(task.id, task.status)} className={`mt-0.5 w-6 h-6 rounded-full border shrink-0 flex items-center justify-center transition-all ${task.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500 hover:border-white"}`}>
                                 {task.status === 'completed' && <span className="text-white text-[10px]">✓</span>}
                               </button>
                               <p className={`text-sm break-words ${task.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{task.description}</p>
@@ -236,9 +236,9 @@ export default function MisTareas() {
                         ))}
                       </div>
                       <div className="p-4 border-t border-zinc-800 bg-zinc-900 space-y-2">
-                        <input type="text" placeholder="Tarea..." className="w-full text-xs p-2 rounded-lg bg-zinc-800 text-white border border-zinc-700 focus:border-blue-500 outline-none transition-all" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} />
+                        <input type="text" placeholder="Tarea..." className="w-full text-xs p-2 rounded-lg bg-zinc-800 text-white outline-none focus:border-blue-500 transition-all border border-zinc-700" value={formDesc[projectName] || ""} onChange={e => setFormDesc({ ...formDesc, [projectName]: e.target.value })} />
                         <div className="flex gap-2">
-                          <select className="flex-1 text-[10px] p-2 rounded-lg bg-zinc-800 border-none outline-none font-bold text-zinc-400" value={formPrio[projectName] || "NO_URGENTE"} onChange={e => setFormPrio({ ...formPrio, [projectName]: e.target.value })}>
+                          <select className="flex-1 text-[10px] p-2 rounded-lg bg-zinc-800 border-none outline-none text-zinc-400" value={formPrio[projectName] || "NO_URGENTE"} onChange={e => setFormPrio({ ...formPrio, [projectName]: e.target.value })}>
                             <option value="NO_URGENTE">Común</option><option value="URGENTE">URGENTE</option>
                           </select>
                           <button onClick={() => handleCreateTask(cityGroup.city, projectName)} className="bg-white text-black font-bold text-xs px-4 py-2 rounded-lg hover:bg-zinc-200 transition-all">Ok</button>
@@ -253,30 +253,30 @@ export default function MisTareas() {
         </div>
 
         {/* LA RUTA */}
-        <div className="mt-16 p-5 md:p-8 rounded-3xl border-2 border-purple-500 bg-zinc-900/50 shadow-[0_0_30px_rgba(168,85,247,0.1)]">
-          <h2 className="text-2xl font-extrabold text-purple-400 mb-6 uppercase tracking-tighter">🚀 LA RUTA</h2>
+        <div className="mt-16 p-5 md:p-8 rounded-3xl border-2 border-purple-500 bg-zinc-900/50 shadow-lg">
+          <h2 className="text-2xl font-extrabold text-purple-400 mb-6 uppercase tracking-tighter text-center sm:text-left">🚀 LA RUTA</h2>
           <div className="flex flex-col gap-3 mb-8">
             <div className="relative">
-              <input type="text" placeholder={isListening ? "Escuchando..." : "Dicta o escribe..."} className={`p-4 pr-14 rounded-xl border w-full bg-zinc-800 text-white outline-none transition-all ${isListening ? "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.2)]" : "border-zinc-700 focus:border-purple-500"}`} value={rutaDesc} onChange={e => setRutaDesc(e.target.value)} />
-              <button onClick={startListening} className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${isListening ? "bg-red-600 text-white animate-pulse shadow-lg" : "bg-zinc-700 text-zinc-400 hover:text-white"}`}>
+              <input type="text" placeholder={isListening ? "Escuchando..." : "Dicta o escribe..."} className={`p-4 pr-14 rounded-xl border w-full bg-zinc-800 text-white outline-none transition-all ${isListening ? "border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.2)]" : "border-zinc-700 focus:border-purple-500"}`} value={rutaDesc} onChange={e => setRutaDesc(e.target.value)} />
+              <button onClick={startListening} className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg transition-all ${isListening ? "bg-red-600 text-white animate-pulse" : "bg-zinc-700 text-zinc-400 hover:text-white"}`}>
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" /><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" /></svg>
               </button>
             </div>
             <div className="flex gap-3">
-              <select className="flex-1 p-3 rounded-xl bg-zinc-800 border-none font-bold text-zinc-400" value={rutaPrio} onChange={e => setRutaPrio(e.target.value as any)}>
+              <select className="flex-1 p-3 rounded-xl bg-zinc-800 border-none outline-none text-zinc-400" value={rutaPrio} onChange={e => setRutaPrio(e.target.value as any)}>
                 <option value="NO_URGENTE">Estándar</option><option value="URGENTE">URGENTE</option>
               </select>
-              <button onClick={handleCreateRuta} className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg uppercase text-xs tracking-widest">Agregar</button>
+              <button onClick={handleCreateRuta} className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-md uppercase text-xs tracking-widest">Agregar</button>
             </div>
           </div>
           <div className="space-y-3">
             {rutaTasks.map(t => (
-              <div key={t.id} className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${t.status === 'completed' ? "bg-zinc-950 opacity-40 border-zinc-800" : t.priority === 'URGENTE' ? "bg-red-950/30 border-red-500 shadow-md" : "bg-zinc-900 border-zinc-800"}`}>
+              <div key={t.id} className={`p-4 rounded-2xl border flex justify-between items-center transition-all ${t.status === 'completed' ? "bg-zinc-950 opacity-40 border-zinc-800" : t.priority === 'URGENTE' ? "bg-red-950/30 border-red-500 shadow-sm" : "bg-zinc-900 border-zinc-800"}`}>
                 <div className="flex gap-4 items-center flex-1">
-                  <button onClick={() => handleCompleteRuta(t.id, t.status)} className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${t.status === 'completed' ? "bg-green-600 border-green-600 shadow-inner" : "border-zinc-500 hover:border-white"}`}>
+                  <button onClick={() => handleCompleteRuta(t.id, t.status)} className={`w-7 h-7 rounded-full border flex items-center justify-center transition-all ${t.status === 'completed' ? "bg-green-600 border-green-600" : "border-zinc-500 hover:border-white"}`}>
                     {t.status === 'completed' && <span className="text-white text-xs">✓</span>}
                   </button>
-                  <p className={`text-base break-words font-medium ${t.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{t.description}</p>
+                  <p className={`text-base break-words ${t.status === 'completed' ? "line-through text-zinc-500" : "text-white"}`}>{t.description}</p>
                 </div>
                 <button onClick={() => handleDeleteRuta(t.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
               </div>
