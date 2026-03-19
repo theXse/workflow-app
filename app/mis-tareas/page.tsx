@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 type PersonalTask = { id: string; city: string; project: string; description: string; priority: 'URGENTE' | 'NO_URGENTE'; status: 'pending' | 'completed'; created_at: string; };
 type Campana = { id: string; nombre: string; };
-type MailingMensual = { id: string; id_campana: string; mes_objetivo: string; objetivo_correo: string; estado_envio: 'pendiente' | 'enviado' | 'en_revision'; };
+type MailingMensual = { id: string; id_campana: string; mes_objetivo: string; objetivo_correo: string; estado_envio: 'pendiente' | 'enviado' | 'en_revision'; priority: 'URGENTE' | 'NO_URGENTE'; };
 type RutaTask = { id: string; description: string; priority: 'URGENTE' | 'NO_URGENTE'; status: 'pending' | 'completed'; };
 
 const AGENCY_STRUCTURE = [
@@ -27,9 +27,13 @@ export default function MisTareas() {
   const [mailingProject, setMailingProject] = useState('');
   const [mailingMes, setMailingMes] = useState('');
   const [mailingObjetivo, setMailingObjetivo] = useState('');
+  const [mailingPriority, setMailingPriority] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
   const [rutaDesc, setRutaDesc] = useState("");
   const [rutaPrio, setRutaPrio] = useState<'URGENTE' | 'NO_URGENTE'>('NO_URGENTE');
   const [isListening, setIsListening] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<MailingMensual>>({});
 
   const getEstadoFecha = (fechaStr: string) => {
     try {
@@ -64,23 +68,37 @@ export default function MisTareas() {
     fetchData();
   }, []);
 
-  // FUNCIÓN DETECTIVE: Nos dirá exactamente qué falla
   const updateMailingStatus = async (id: string, nuevoEstado: MailingMensual['estado_envio']) => {
-    // 1. Cambio visual rápido
     setMailings(prev => prev.map(m => m.id === id ? { ...m, estado_envio: nuevoEstado } : m));
-
-    // 2. Intento de guardado con reporte detallado
     const { data, error } = await supabase
       .from("mailings_mensuales")
       .update({ estado_envio: nuevoEstado })
       .eq("id", id)
       .select();
-
     if (error) {
-      console.error("ERROR SUPABASE:", error);
       alert(`DETALLE DEL ERROR:\n\nMensaje: ${error.message}\nCódigo: ${error.code}\nHint: ${error.hint || 'Sin pistas'}`);
     } else if (data && data.length === 0) {
-      alert("Error: Supabase no encontró la fila con ese ID. Intenta crear un mailing nuevo y cambiarle el estado a ese.");
+      alert("Error: Supabase no encontró la fila con ese ID.");
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingId) return;
+    const { error } = await supabase
+      .from("mailings_mensuales")
+      .update({
+        id_campana: editForm.id_campana,
+        mes_objetivo: editForm.mes_objetivo,
+        objetivo_correo: editForm.objetivo_correo,
+        priority: editForm.priority,
+      })
+      .eq("id", editingId);
+
+    if (!error) {
+      setMailings(prev => prev.map(m => m.id === editingId ? { ...m, ...editForm } : m));
+      setEditingId(null);
+    } else {
+      alert(`Error al guardar: ${error.message}`);
     }
   };
 
@@ -92,9 +110,15 @@ export default function MisTareas() {
       id_campana: selectedCampana.id,
       mes_objetivo: mailingMes,
       objetivo_correo: mailingObjetivo,
-      estado_envio: 'pendiente'
+      estado_envio: 'pendiente',
+      priority: mailingPriority,
     }).select().single();
-    if (data) { setMailings([data, ...mailings]); setMailingMes(''); setMailingObjetivo(''); }
+    if (data) {
+      setMailings([data, ...mailings]);
+      setMailingMes('');
+      setMailingObjetivo('');
+      setMailingPriority('NO_URGENTE');
+    }
   };
 
   const handleCreateTask = async (city: string, project: string) => {
@@ -167,11 +191,17 @@ export default function MisTareas() {
               <input type="text" placeholder="DD/MM" className="p-3 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700" value={mailingMes} onChange={e => setMailingMes(e.target.value)} />
             </div>
             <input type="text" placeholder="Objetivo..." className="p-3 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700" value={mailingObjetivo} onChange={e => setMailingObjetivo(e.target.value)} />
+            <select className="p-3 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700" value={mailingPriority} onChange={e => setMailingPriority(e.target.value as any)}>
+              <option value="NO_URGENTE">Normal</option>
+              <option value="URGENTE">URGENTE</option>
+            </select>
             <button onClick={handleCreateMailing} className="bg-white text-black font-bold p-3 rounded-lg hover:bg-zinc-200 transition-all">Guardar</button>
           </div>
+
           <div className="space-y-3">
             {mailings.map(m => {
               const estFecha = getEstadoFecha(m.mes_objetivo);
+              const isEditing = editingId === m.id;
               let estiloCard = "border-zinc-800 bg-zinc-950";
               let badge = null;
 
@@ -183,28 +213,87 @@ export default function MisTareas() {
               }
 
               return (
-                <div key={m.id} className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between gap-4 transition-all ${estiloCard}`}>
-                  <div className="flex-1">
-                    <p className={`font-bold ${m.estado_envio === 'enviado' ? "text-zinc-500" : "text-blue-400"}`}>
-                      {campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo} {badge}
-                    </p>
-                    <p className="text-xs text-zinc-400 mt-1">{m.objetivo_correo}</p>
-                  </div>
-                  <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <select
-                      value={m.estado_envio}
-                      onChange={(e) => updateMailingStatus(m.id, e.target.value as any)}
-                      className={`flex-1 sm:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none cursor-pointer transition-all ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
-                        m.estado_envio === 'enviado' ? 'bg-zinc-800 text-zinc-500' :
-                          'bg-zinc-700 text-white'
-                        }`}
-                    >
-                      <option value="pendiente">PENDIENTE</option>
-                      <option value="en_revision">EN REVISIÓN</option>
-                      <option value="enviado">ENVIADO</option>
-                    </select>
-                    <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
-                  </div>
+                <div key={m.id} className={`p-4 rounded-xl border flex flex-col gap-4 transition-all ${estiloCard}`}>
+                  {isEditing ? (
+                    /* ── MODO EDICIÓN ── */
+                    <div className="flex flex-col gap-3">
+                      <select
+                        className="p-2 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700"
+                        value={editForm.id_campana}
+                        onChange={e => setEditForm(prev => ({ ...prev, id_campana: e.target.value }))}
+                      >
+                        {campanas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                      </select>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          type="text"
+                          placeholder="DD/MM"
+                          className="p-2 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700"
+                          value={editForm.mes_objetivo || ""}
+                          onChange={e => setEditForm(prev => ({ ...prev, mes_objetivo: e.target.value }))}
+                        />
+                        <select
+                          className="p-2 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700"
+                          value={editForm.priority || "NO_URGENTE"}
+                          onChange={e => setEditForm(prev => ({ ...prev, priority: e.target.value as any }))}
+                        >
+                          <option value="NO_URGENTE">Normal</option>
+                          <option value="URGENTE">URGENTE</option>
+                        </select>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Objetivo..."
+                        className="p-2 rounded-lg bg-zinc-800 text-white text-sm border border-zinc-700"
+                        value={editForm.objetivo_correo || ""}
+                        onChange={e => setEditForm(prev => ({ ...prev, objetivo_correo: e.target.value }))}
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={handleSaveEdit} className="flex-1 bg-white text-black font-bold text-xs py-2 rounded-lg hover:bg-zinc-200 transition-all">Guardar</button>
+                        <button onClick={() => setEditingId(null)} className="flex-1 bg-zinc-700 text-white font-bold text-xs py-2 rounded-lg hover:bg-zinc-600 transition-all">Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── MODO NORMAL ── */
+                    <div className="flex flex-col sm:flex-row justify-between gap-4">
+                      <div className="flex-1">
+                        <p className={`font-bold ${m.estado_envio === 'enviado' ? "text-zinc-500" : "text-blue-400"}`}>
+                          {campanas.find(c => c.id === m.id_campana)?.nombre} · {m.mes_objetivo} {badge}
+                          {m.priority === 'URGENTE' && (
+                            <span className="ml-2 text-[10px] bg-red-600 px-2 py-0.5 rounded-full font-bold">URGENTE</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-zinc-400 mt-1">{m.objetivo_correo}</p>
+                      </div>
+                      <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <select
+                          value={m.estado_envio}
+                          onChange={(e) => updateMailingStatus(m.id, e.target.value as any)}
+                          className={`flex-1 sm:flex-none text-[10px] font-black px-4 py-2 rounded-full border-none cursor-pointer transition-all ${m.estado_envio === 'en_revision' ? 'bg-amber-500 text-black' :
+                            m.estado_envio === 'enviado' ? 'bg-zinc-800 text-zinc-500' :
+                              'bg-zinc-700 text-white'
+                            }`}
+                        >
+                          <option value="pendiente">PENDIENTE</option>
+                          <option value="en_revision">EN REVISIÓN</option>
+                          <option value="enviado">ENVIADO</option>
+                        </select>
+                        <button
+                          onClick={() => { setEditingId(m.id); setEditForm(m); }}
+                          className="text-zinc-600 hover:text-blue-400 transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                        <button onClick={() => handleDeleteMailing(m.id)} className="text-zinc-600 hover:text-red-500 transition-colors">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
