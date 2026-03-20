@@ -39,6 +39,13 @@ export default function RootLayout({
               🎙️ Recordatorios
             </Link>
 
+            <Link
+              href="/viaje"
+              className="text-white font-black text-[9px] md:text-xs hover:text-green-400 transition-colors uppercase tracking-tighter md:tracking-normal border-l border-zinc-700 pl-4 md:pl-10"
+            >
+              ✈️ Viaje
+            </Link>
+
           </div>
         </nav>
 
