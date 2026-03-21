@@ -15,19 +15,7 @@ const AGENCY_STRUCTURE = [
   { city: "Concepción", projects: ["Green Concepción", "Vive Ainavillo"] }
 ];
 
-const VISA_DATA = [
-  {"id": 1, "etapa": "Carpeta Convivencia", "fecha": "2026-04-10", "color": "🔴", "verificacion": "Pruebas de domicilio compartido última año."},
-  {"id": 2, "etapa": "Celebración AUC", "fecha": "2026-04-20", "color": "🔴", "verificacion": "Firma en Registro Civil de Chile."},
-  {"id": 3, "etapa": "Apostilla AUC (Minrel)", "fecha": "2026-04-25", "color": "🔴", "verificacion": "Certificado con código de verificación digital."},
-  {"id": 4, "etapa": "Control Solvencia (€13k)", "fecha": "2026-05-30", "color": "🔴", "verificacion": "3 meses de cartolas bancarias estables."},
-  {"id": 5, "etapa": "Antecedentes Penales", "fecha": "2026-06-15", "color": "🟡", "verificacion": "Solicitar fines especiales + Apostilla."},
-  {"id": 6, "etapa": "Médico RSI 2005", "fecha": "2026-07-01", "color": "🟡", "verificacion": "Validar frase textual de Salud Pública."},
-  {"id": 7, "etapa": "Seguro Salud España", "fecha": "2026-07-15", "color": "🔵", "verificacion": "Sin copagos, sin carencias, con repatriación."},
-  {"id": 8, "etapa": "Expediente EX-00 Diana", "fecha": "2026-07-25", "color": "🔵", "verificacion": "Copia pasaporte completa + Formulario."},
-  {"id": 9, "etapa": "Cita Consular Stgo", "fecha": "2026-08-01", "color": "🟢", "verificacion": "Presentación conjunta de expedientes."},
-  {"id": 10, "etapa": "Empadronamiento BCN", "fecha": "2026-09-15", "color": "🔴", "verificacion": "Registro domiciliario en Ayuntamiento."},
-  {"id": 11, "etapa": "Huellas TIE Diana", "fecha": "2026-10-10", "color": "🔴", "verificacion": "Cita Policía para tarjeta física."}
-];
+
 
 export default function MisTareas() {
   const [tasks, setTasks] = useState<PersonalTask[]>([]);
@@ -193,62 +181,7 @@ export default function MisTareas() {
       <div className="max-w-7xl mx-auto pb-20">
         <h1 className="text-3xl md:text-4xl font-extrabold mb-8">Mis Tareas Personales</h1>
 
-        {/* VISA BARCELONA SEPTIEMBRE 2026 */}
-        <div className="mb-10 p-5 md:p-8 rounded-3xl border border-indigo-500/50 bg-indigo-950/10 shadow-lg">
-          <h2 className="text-2xl font-extrabold text-indigo-400 mb-6 uppercase tracking-tighter flex items-center gap-2">
-            <span>🇪🇸</span> Visa Barcelona Septiembre 2026
-          </h2>
-          <div className="space-y-4">
-            {[...VISA_DATA]
-              .sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime())
-              .map(task => {
-                let cardStyle = "border-zinc-700 bg-zinc-800/50";
-                if (task.color === "🔴") cardStyle = "border-red-500/50 bg-red-950/20";
-                else if (task.color === "🟡") cardStyle = "border-amber-500/50 bg-amber-950/20";
-                else if (task.color === "🔵") cardStyle = "border-blue-500/50 bg-blue-950/20";
-                else if (task.color === "🟢") cardStyle = "border-emerald-500/50 bg-emerald-950/20";
 
-                return (
-                  <div key={task.id} className={`p-5 rounded-2xl border-l-4 shadow-sm flex flex-col md:flex-row gap-5 transition-all ${cardStyle} hover:bg-white/5`}>
-                    <div className="flex-1">
-                      <div className="flex flex-wrap justify-between items-start mb-4 gap-4">
-                        <h3 className="font-bold text-lg text-white">{task.etapa}</h3>
-                        <span className={`text-[10px] sm:text-xs font-black px-3 py-1.5 rounded-full shrink-0 border uppercase tracking-wider flex items-center gap-1.5 ${
-                            task.color === "🔴" ? "bg-red-500/20 text-red-400 border-red-500/30" :
-                            task.color === "🟡" ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
-                            task.color === "🔵" ? "bg-blue-500/20 text-blue-400 border-blue-500/30" :
-                            "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                          }`}>
-                          <span>{task.color}</span>
-                          {task.color === "🔴" ? "CRÍTICO" : task.color === "🟡" ? "ALTA" : task.color === "🔵" ? "MEDIA" : "BAJA"}
-                        </span>
-                      </div>
-                      <div className="bg-black/40 p-3.5 rounded-xl border border-white/5 flex gap-3 items-start md:mr-8">
-                        <div className="mt-0.5 text-indigo-400">
-                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-0.5">Criterio de Verificación</span>
-                          <p className="text-sm text-zinc-200">{task.verificacion}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="md:w-48 shrink-0 flex flex-col justify-center items-center py-4 px-2 bg-black/40 rounded-xl border border-white/5">
-                      <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1">
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                        Fecha Límite
-                      </span>
-                      <span className="text-lg font-black text-white">
-                        {new Date(task.fecha + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-        </div>
 
         {/* SECCIÓN MAILINGS */}
         <div className="mb-10 bg-zinc-900 rounded-2xl p-4 md:p-6 border border-zinc-800">
