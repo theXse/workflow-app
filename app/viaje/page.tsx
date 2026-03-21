@@ -2,52 +2,38 @@
 
 import React, { useState } from "react";
 
-type TaskStatus = 'pending' | 'apostilla' | 'completed';
-
 type VisaTask = {
   id: number;
   color: string;
-  etapa: string;
   fecha: string;
+  etapa: string;
   notas: string;
-  status: TaskStatus;
+  status: 'pending' | 'completed';
 };
 
 const INITIAL_PLAN: VisaTask[] = [
-  {"id": 1, "color": "🔴", "etapa": "Carpeta de Convivencia (Pruebas)", "fecha": "2026-04-10", "notas": "Recopilar cuentas de servicios (luz/net) y declaración notarial. (Sustituto de arriendo).", "status": "pending"},
-  {"id": 2, "color": "🔴", "etapa": "Celebración AUC", "fecha": "2026-04-20", "notas": "Acuerdo de Unión Civil en Registro Civil. Verificación: Apostilla Digital Minrel inmediata.", "status": "pending"},
-  {"id": 3, "color": "🔴", "etapa": "Control Solvencia (€13.000)", "fecha": "2026-05-30", "notas": "Fondos estables en cartolas de los últimos 3 meses.", "status": "pending"},
-  {"id": 4, "color": "🟡", "etapa": "Antecedentes Penales", "fecha": "2026-06-15", "notas": "Certificado fines especiales + Apostilla (Vigencia 90 días).", "status": "pending"},
-  {"id": 5, "color": "🟡", "etapa": "Certificado Médico RSI 2005", "fecha": "2026-07-01", "notas": "Debe incluir frase textual de salud pública internacional + Apostilla.", "status": "pending"},
-  {"id": 6, "color": "🔵", "etapa": "Seguro Médico Español", "fecha": "2026-07-15", "notas": "Póliza sin copago (Sanitas/Adeslas) operativa desde el día 1.", "status": "pending"},
-  {"id": 7, "color": "🔵", "etapa": "Expediente EX-00 Diana", "fecha": "2026-07-25", "notas": "Formulario de acompañante + Copia completa de todas las hojas del pasaporte.", "status": "pending"},
-  {"id": 8, "color": "🔵", "etapa": "Cita Consular Santiago", "fecha": "2026-08-01", "notas": "Entrega de carpetas espejo para visa.", "status": "pending"},
-  {"id": 9, "color": "🔴", "etapa": "Empadronamiento BCN", "fecha": "2026-09-15", "notas": "Alta en ayuntamiento (Vital para legalidad en España).", "status": "pending"},
-  {"id": 10, "color": "🔴", "etapa": "Huellas TIE Diana", "fecha": "2026-10-10", "notas": "Cita en Policía para tarjeta de identidad física.", "status": "pending"}
+  {"id": 1, "color": "🔴", "fecha": "2026-04-10", "etapa": "Carpeta de Convivencia", "notas": "Recopilar cuentas de servicios (luz/net) y declaración notarial. (Sustituto de arriendo).", "status": "pending"},
+  {"id": 2, "color": "🔴", "fecha": "2026-04-20", "etapa": "Celebración AUC", "notas": "Acuerdo de Unión Civil en Registro Civil. Verificación: Apostilla Digital Minrel inmediata.", "status": "pending"},
+  {"id": 3, "color": "🔴", "fecha": "2026-05-30", "etapa": "Control Solvencia (€13.000)", "notas": "Fondos estables en cartolas de los últimos 3 meses.", "status": "pending"},
+  {"id": 4, "color": "🟡", "fecha": "2026-06-15", "etapa": "Antecedentes Penales", "notas": "Certificado fines especiales + Apostilla (Vigencia 90 días).", "status": "pending"},
+  {"id": 5, "color": "🟡", "fecha": "2026-07-01", "etapa": "Certificado Médico RSI 2005", "notas": "Debe incluir frase textual de salud pública internacional + Apostilla.", "status": "pending"},
+  {"id": 6, "color": "🔵", "fecha": "2026-07-15", "etapa": "Seguro Médico Español", "notas": "Póliza sin copago (Sanitas/Adeslas) operativa desde el día 1 de viaje.", "status": "pending"},
+  {"id": 7, "color": "🔵", "fecha": "2026-07-25", "etapa": "Expediente EX-00 Diana", "notas": "Formulario de acompañante + Copia completa de todas las hojas del pasaporte.", "status": "pending"},
+  {"id": 8, "color": "🔵", "fecha": "2026-08-01", "etapa": "Cita Consular Santiago", "notas": "Entrega presencial de carpetas espejo para visa.", "status": "pending"},
+  {"id": 9, "color": "🔴", "fecha": "2026-09-15", "etapa": "Empadronamiento BCN", "notas": "Alta en ayuntamiento (Vital para legalidad en España).", "status": "pending"},
+  {"id": 10, "color": "🔴", "fecha": "2026-10-10", "etapa": "Huellas TIE Diana", "notas": "Cita en Policía para tarjeta de identidad física.", "status": "pending"}
 ];
 
 export default function Viaje() {
   const [tasks, setTasks] = useState<VisaTask[]>(INITIAL_PLAN);
 
-  const updateStatus = (id: number, newStatus: TaskStatus) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, status: newStatus } : t));
-  };
-
-  const handleDelete = (id: number) => {
-    if (window.confirm("¿Estás seguro de que deseas eliminar permanentemente esta tarea?")) {
-      setTasks(tasks.filter(t => t.id !== id));
-    }
+  const toggleStatus = (id: number) => {
+    setTasks(tasks.map(t => t.id === id ? { ...t, status: t.status === 'completed' ? 'pending' : 'completed' } : t));
   };
 
   const getSortedTasks = () => {
-    return [...tasks].sort((a, b) => {
-      // Regla: Los completados se van automáticamente al final de la lista
-      if (a.status === 'completed' && b.status !== 'completed') return 1;
-      if (b.status === 'completed' && a.status !== 'completed') return -1;
-      
-      // Regla: Orden cronológico inverso (lo que vence antes va arriba)
-      return new Date(a.fecha).getTime() - new Date(b.fecha).getTime();
-    });
+    // Regla: Orden cronológico estricto (no mover tareas completadas al final)
+    return [...tasks].sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
   };
 
   return (
@@ -65,23 +51,15 @@ export default function Viaje() {
             let badgeStyle = "";
             let badgeText = "";
             
-            // Regla: Si está completado, cambia a color Gris y se tacha
+            // Regla: Tarea gris opaca al estar LOGRADA
             if (task.status === 'completed') {
-              cardStyle = "border-zinc-800 bg-zinc-900/60 opacity-60 grayscale";
+              cardStyle = "border-zinc-800 bg-zinc-900/40 opacity-50";
               textColor = "text-zinc-500 line-through";
               notesColor = "text-zinc-600 line-through";
-              badgeStyle = "bg-zinc-800 text-zinc-500 border-zinc-700";
-              badgeText = "COMPLETADO";
+              badgeStyle = "bg-zinc-800 text-zinc-500 border-zinc-700 opacity-50";
+              badgeText = "LOGRADO";
             } 
-            // Regla: Si falta legalización, el botón debe cambiar el color de la tarea a Naranja
-            else if (task.status === 'apostilla') {
-              cardStyle = "border-orange-500/80 bg-orange-950/40 shadow-[0_0_20px_rgba(249,115,22,0.15)]";
-              textColor = "text-orange-100";
-              notesColor = "text-orange-200/80";
-              badgeStyle = "bg-orange-500/20 text-orange-400 border-orange-500/50";
-              badgeText = "EN PROCESO (APOSTILLA)";
-            } 
-            // Estilos por defecto (basado en prioridad de colores del JSON)
+            // Regla: Estilos dinámicos para tareas pendientes según el color
             else {
               if (task.color === "🔴") {
                 cardStyle = "border-red-500/60 bg-red-950/30 shadow-[0_0_15px_rgba(239,68,68,0.1)]";
@@ -95,16 +73,11 @@ export default function Viaje() {
                 cardStyle = "border-blue-500/50 bg-blue-950/20";
                 badgeStyle = "bg-blue-500/20 text-blue-400 border-blue-500/30";
                 badgeText = "MEDIA";
-              } else if (task.color === "🟢") {
-                cardStyle = "border-emerald-500/50 bg-emerald-950/20";
-                badgeStyle = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
-                badgeText = "BAJA";
               }
             }
 
             return (
               <div key={task.id} className={`p-5 md:p-6 rounded-2xl border-l-4 shadow-sm flex flex-col gap-4 transition-all duration-300 ${cardStyle}`}>
-                
                 <div className="flex flex-col md:flex-row gap-5">
                   <div className="flex-1">
                     <div className="flex flex-wrap justify-between items-start mb-3 gap-4">
@@ -128,43 +101,19 @@ export default function Viaje() {
                   </div>
                 </div>
 
-                {/* BOTONERA DE ACCIÓN RÁPIDA */}
-                <div className="flex gap-2 md:gap-3 border-t border-white/5 pt-4 mt-2 flex-wrap">
+                {/* BOTÓN ÚNICO DE ACCIÓN */}
+                <div className="flex justify-start sm:justify-end border-t border-white/5 pt-4 mt-2">
                   <button 
-                    onClick={() => updateStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
-                    className={`flex-1 min-w-[140px] text-xs font-black px-4 py-3 rounded-xl transition-all border uppercase tracking-wider flex items-center justify-center gap-2 ${
+                    onClick={() => toggleStatus(task.id)}
+                    className={`w-full sm:w-auto min-w-[140px] text-xs font-black px-6 py-3 rounded-xl transition-all border uppercase tracking-wider flex items-center justify-center gap-2 ${
                       task.status === 'completed' 
                       ? 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-700' 
                       : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20 hover:shadow-[0_0_10px_rgba(16,185,129,0.2)]'
                     }`}
                   >
-                    {task.status === 'completed' ? '↺ Deshacer' : '✅ Completado'}
-                  </button>
-                  
-                  {task.status !== 'completed' && (
-                    <button 
-                      onClick={() => updateStatus(task.id, task.status === 'apostilla' ? 'pending' : 'apostilla')}
-                      className={`flex-1 min-w-[200px] text-xs font-black px-4 py-3 rounded-xl transition-all border uppercase tracking-wider flex items-center justify-center gap-2 ${
-                        task.status === 'apostilla'
-                        ? 'bg-orange-500/20 text-orange-400 border-orange-500/50 hover:bg-orange-500/30'
-                        : 'bg-zinc-800/80 text-orange-400/80 border-orange-500/20 hover:bg-orange-500/20'
-                      }`}
-                    >
-                      {task.status === 'apostilla' ? '⚠️ Quitar Marca de Apostilla' : '⚠️ Pendiente Apostilla'}
-                    </button>
-                  )}
-                  
-                  <div className="hidden sm:block flex-1"></div>
-                  
-                  <button 
-                    onClick={() => handleDelete(task.id)}
-                    className="flex-1 sm:flex-none text-xs font-black px-6 py-3 rounded-xl transition-all border bg-red-500/10 text-red-500 border-red-500/30 hover:bg-red-500/30 uppercase tracking-wider flex items-center justify-center"
-                    title="Borrar tarea definitivamente"
-                  >
-                    ❌ Eliminar
+                    {task.status === 'completed' ? '↺ Deshacer' : '✅ LOGRADO'}
                   </button>
                 </div>
-
               </div>
             );
           })}
