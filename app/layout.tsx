@@ -46,6 +46,13 @@ export default function RootLayout({
               ✈️ Viaje
             </Link>
 
+            <Link
+              href="/asistente"
+              className="text-white font-black text-[9px] md:text-xs hover:text-orange-400 transition-colors uppercase tracking-tighter md:tracking-normal border-l border-zinc-700 pl-4 md:pl-10"
+            >
+              🤖 Asistente
+            </Link>
+
           </div>
         </nav>
 
