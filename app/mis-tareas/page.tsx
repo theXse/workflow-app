@@ -47,7 +47,8 @@ export default function MisTareas() {
       if (dia === hoyDia && mes === hoyMes) return 'hoy';
       const fechaMeta = new Date(hoy.getFullYear(), mes - 1, dia);
       const diferencia = (fechaMeta.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24);
-      if (diferencia > 0 && diferencia <= 7) return 'semana';
+      if (diferencia < 0) return 'vencido';
+      if (diferencia <= 7) return 'semana';
       return 'normal';
     } catch { return 'normal'; }
   };
@@ -211,9 +212,15 @@ export default function MisTareas() {
 
               if (m.estado_envio === 'en_revision') estiloCard = "border-amber-500 bg-amber-950/20 shadow-[0_0_15px_rgba(245,158,11,0.1)]";
               else if (m.estado_envio === 'enviado') estiloCard = "border-zinc-800 bg-zinc-900 opacity-50";
-              else if (estFecha === 'hoy') {
+              else if (estFecha === 'vencido') {
+                estiloCard = "border-red-600 bg-red-900/20 animate-pulse";
+                badge = <span className="ml-2 text-[10px] bg-red-700 px-2 py-0.5 rounded-full font-bold">VENCIDO</span>;
+              } else if (estFecha === 'hoy') {
                 estiloCard = "border-red-600 bg-red-900/20 animate-pulse";
                 badge = <span className="ml-2 text-[10px] bg-red-600 px-2 py-0.5 rounded-full font-bold">¡HOY!</span>;
+              } else if (estFecha === 'semana') {
+                estiloCard = "border-yellow-500 bg-yellow-900/10";
+                badge = <span className="ml-2 text-[10px] bg-yellow-600 px-2 py-0.5 rounded-full font-bold">PRONTO</span>;
               }
 
               return (
